@@ -1,0 +1,2 @@
+Weight file for ConvNext30
+convnext_xlarge_384_in22ft1k_30.pth.onnx

@@ -1,0 +1,4 @@
+1. Face Detection Models
+- Verihubs FD
+- RetinaFace
+- Dlib (for e4s deepfake generation)

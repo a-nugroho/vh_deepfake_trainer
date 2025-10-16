@@ -1,0 +1,79 @@
+mode: train
+lmdb: False
+dry_run: false
+dataset_root_rgb: './datasets'
+dataset_json_folder: '/mnt/ssd/datasets/deepfake/dataset_json/'
+dataset_type: 'verihubs'
+SWA: False
+save_avg: True
+log_dir: ./logs/training/
+train_batchSize: 24
+test_batchSize: 24
+train_dataset : [
+    200k_live_face_dataset,
+    #deepfake_in_the_wild_train,
+    #facebook_dfdc_preview,
+    #Celeb-DF-v2,
+    #deepfake_timit,
+    facebook_dfdc_train_reduced,
+    #training_indonesian_deepfake_dataset_v2_updated,
+    #df40_train,
+    df40_train_reduced,
+    reswapper_v2_train,
+    reswapper_v2_val,
+    #DeepFakeFace,
+    #faceforensics,
+    #iFakeFaceDB,
+    inswapper,
+    #DFFD,
+    #DFGC-2021,
+    #facebook_dfdc_val,
+    #faceforensics_benchmark,
+    ffhq
+]
+test_dataset : [
+    evaluation_indonesian_deepfake_dataset_v2_updated,
+    #combined_deepfake_data,
+    #df40_train
+    #ciplab,
+    #UADFV,
+    facebook_dfdc_test,
+    #DeeperForensics-1.0,
+    #deepfake_in_the_wild_test,
+    #df40_eval_edit,
+    #reswapper_v2_val
+]
+# label settings
+label_dict:
+  # DFD
+  DFD_fake: 1
+  DFD_real: 0
+  # FF++ + FaceShifter(FF-real+FF-FH)
+  FF-SH: 1
+  FF-F2F: 1
+  FF-DF: 1
+  FF-FS: 1
+  FF-NT: 1
+  FF-FH: 1
+  FF-real: 0
+  # CelebDF
+  CelebDFv1_real: 0
+  CelebDFv1_fake: 1
+  CelebDFv2_real: 0
+  CelebDFv2_fake: 1
+  # DFDCP
+  DFDCP_Real: 0
+  DFDCP_FakeA: 1
+  DFDCP_FakeB: 1
+  # DFDC
+  DFDC_Fake: 1
+  DFDC_Real: 0
+  # DeeperForensics-1.0
+  DF_fake: 1
+  DF_real: 0
+  # UADFV
+  UADFV_Fake: 1
+  UADFV_Real: 0
+  # Roop
+  roop_Real: 0
+  roop_Fake: 1
