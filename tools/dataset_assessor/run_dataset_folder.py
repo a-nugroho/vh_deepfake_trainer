@@ -11,7 +11,12 @@ from face_detection import FaceDetection
 from face_quality_assessment import FaceQualityAssessment 
 from face_deepfake import DeepfakeDetection
 import csv
+import stone
 from utils import get_list_images
+import insightface
+from insightface.app import FaceAnalysis
+from insightface.data import get_image as ins_get_image
+
 root_json = "/mnt/ssd/datasets/deepfake/dataset_json"
 
 def read_data(root_json, name_directory):
