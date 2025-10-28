@@ -45,7 +45,17 @@ def get_pair_key(key_source,dict_collection):
     most_common_elements = [k for k, v in counter.items() if v == max_count]
     if key_source in most_common_elements:
         most_common_elements.remove(key_source)
-    return random.choice(most_common_elements) if most_common_elements else None
+    
+    if not most_common_elements:
+        return None, None
+    
+    # Choose one most frequent key (if multiple)
+    chosen_key = random.choice(most_common_elements)
+
+     # Get the top-level dict keys ('b', 'c', etc.) that contain this chosen key
+    containing_dict_keys = [k for k, v in dict_collection.items() if chosen_key in v]
+
+    return chosen_key, containing_dict_keys
 
 def get_pair_candidates(list_criteria,data_all):
     dict_collection = {}
@@ -149,7 +159,16 @@ with open(path_json, 'r') as f:
     # Parsing the JSON file into a Python dictionary
     data_source = json.load(f)
 
+#ADHOC 200k_live_face_dataset
+if "200k_live_face_dataset" in path_json:
+    data_source_new = {}
+    for k, v in data_source.items():
+        k_new = k.replace("/processes","")
+        data_source_new[k_new] = v
+    
+    data_source = data_source_new
 
+#print(list(data_source.keys())[:10])
 dict_att_json = read_att_json(dir_att)
 
 data_source = merge_nested_dicts(*[data_source,dict_att_json],mode="existing_only")
@@ -187,10 +206,10 @@ for key_now, value_now in data_filtered.items():
     except:
         continue
     
-    swap_pair = get_pair_key(key_now,dict_collection)
+    swap_pair, matched_criteria = get_pair_key(key_now,dict_collection)
     swap_pair_list.append(swap_pair)
     value_now['swap_pair_path'] = swap_pair
-    
+    value_now['matched_criteria'] = '|'.join(sorted(matched_criteria)) if matched_criteria is not None else matched_criteria
     """
     for k, v in value_now.items():
         if type(v) == str:
@@ -198,7 +217,7 @@ for key_now, value_now in data_filtered.items():
     key_now = key_now.replace("../../","/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/")
     """
 
-    data_completed[key_now] = {k: value_now[k] for k in ["path","status","swap_pair_path"] if k in value_now} 
+    data_completed[key_now] = {k: value_now[k] for k in ["path","status","swap_pair_path","matched_criteria"] if k in value_now} 
     #for subkey_now, subdict_now in data_completed.items():
     #    subkey_now = subkey_now.replace("../../","/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/")
     #    for subsubkey_now, subsubvalue_now in subdict_now.items():

@@ -1,1 +1,1 @@
-python run_attribute_json.py --json_path result_200k_live_face_dataset.json --dataset_name 200k_live_face_dataset --dir_images /mnt/ssd/datasets/deepfake/200k_live_face_dataset/processes/live/face
+python run_attribute_json.py --json_path result_200k_live_face_dataset.json --dataset_name 200k_live_face_dataset --dir_images /mnt/ssd/datasets/deepfake/200k_live_face_dataset/live
