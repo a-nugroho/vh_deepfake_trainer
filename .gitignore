@@ -222,3 +222,5 @@ __marimo__/
 # skipping checkpoints
 *.pth
 *.onnx
+
+misc_folder/

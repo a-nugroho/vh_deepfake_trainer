@@ -16,7 +16,6 @@ import insightface
 from insightface.app import FaceAnalysis
 from insightface.data import get_image as ins_get_image
 
-root_json = "/mnt/ssd/datasets/deepfake/dataset_json"
 
 def read_data(root_json, name_directory):
     path_json = os.path.join(root_json,name_directory+".json")
