@@ -1,0 +1,1 @@
+docker run --gpus all -it -v /mnt:/mnt ghost-env bash
