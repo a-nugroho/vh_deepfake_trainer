@@ -1,0 +1,8 @@
+{
+    "/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_55plus/processed/fake/e4s_20251103_iso0-8/swap_99922_verify_3c2264d8-bc9c-4b27-96de-ea72e3d22bbf_60901acc-e67d-425e-892c-61c74e659c31_original_to_208136_verify_8148870e-d704-4811-a118-a83dcf03fd77_86ac68db-21da-4a88-97cd-a0d99f83b8e1_original.png": {
+        "image_name": "swap_99922_verify_3c2264d8-bc9c-4b27-96de-ea72e3d22bbf_60901acc-e67d-425e-892c-61c74e659c31_original_to_208136_verify_8148870e-d704-4811-a118-a83dcf03fd77_86ac68db-21da-4a88-97cd-a0d99f83b8e1_original.png",
+        "dfd_score_1-0-0": 0.8324589729309082,
+        "label": 1,
+        "label_name": "deepfake"
+    }
+}

@@ -9,5 +9,5 @@ sys.path.append(project_root_dir)
 
 
 #from .deepfake_dataset import BalanceDeepFakeDataset,DeepFakeDataset,
-from .deepfake_dataset import DeepFakeDataset
+from .deepfake_dataset import StratifiedSourceDataset, DeepFakeDataset
 from .deepfake_dataset import ProportionalStratifiedBatchSampler

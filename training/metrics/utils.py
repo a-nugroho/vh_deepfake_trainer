@@ -71,18 +71,27 @@ def get_test_metrics(y_pred, y_true, img_names, direct_auc=False):
     y_pred = y_pred.squeeze()
     # For UCF, where labels for different manipulations are not consistent.
     y_true[y_true >= 1] = 1
-    # auc
-    fpr, tpr, thresholds = metrics.roc_curve(y_true, y_pred, pos_label=1)
-    auc = metrics.auc(fpr, tpr)
-    # eer
-    fnr = 1 - tpr
-    eer = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
     # ap
     ap = metrics.average_precision_score(y_true, y_pred)
     # acc
     prediction_class = (y_pred > 0.5).astype(int)
     correct = (prediction_class == np.clip(y_true, a_min=0, a_max=1)).sum().item()
     acc = correct / len(prediction_class)
+    # auc
+    if (sum(y_true)/len(y_true) >= 1) or sum(y_true==0):
+        #either all positive or all negative
+        fpr, tpr, thresholds = metrics.roc_curve(y_true, y_pred, pos_label=1)
+        auc = metrics.auc(fpr, tpr)
+        fpr = 1-acc if sum(y_true==0) else 0 # all negative case
+        fnr = 1-acc if (sum(y_true)/len(y_true) >= 1) else 0 # all positive case
+        eer = 1-acc
+    else:
+        fpr, tpr, thresholds = metrics.roc_curve(y_true, y_pred, pos_label=1)
+        auc = metrics.auc(fpr, tpr)
+        # eer
+        fnr = 1 - tpr
+        eer = fpr[np.nanargmin(np.absolute((fnr - fpr)))]
+    
     #print(img_names)
     if direct_auc:
         v_auc = auc

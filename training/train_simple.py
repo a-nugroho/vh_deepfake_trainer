@@ -35,7 +35,6 @@ from dataset import *
 from metrics.utils import parse_metric_for_print
 from logger import create_logger, RankFilter
 #from training.dataset.deepfake_dataset import DeepFakeDataset
-from utils.dataset import JSONDataset
 
 
 parser = argparse.ArgumentParser(description='Process some paths.')
@@ -61,76 +60,33 @@ def init_seed(config):
         torch.manual_seed(config['manualSeed'])
         torch.cuda.manual_seed_all(config['manualSeed'])
 
-def process_json_data(json_file, models, transforms, output_csv, is_cropped=False):
-    """Process data from JSON file, load images, and perform inference."""
-    dataset = JSONDataset(
-        json_file,
-        transform=transforms,
-        is_cropped=is_cropped,
-        # preprocess_dir=preprocess_dir,
-    )
-
 
 def prepare_training_data(config):
     # Only use the blending dataset class in training
-    if 'dataset_type' in config and config['dataset_type'] == 'blend':
-        if config['model_name'] == 'facexray':
-            train_set = FFBlendDataset(config)
-        elif config['model_name'] == 'fwa':
-            train_set = FWABlendDataset(config)
-        elif config['model_name'] == 'sbi':
-            train_set = SBIDataset(config, mode='train')
-        elif config['model_name'] == 'lsda':
-            train_set = LSDADataset(config, mode='train')
-        else:
-            raise NotImplementedError(
-                'Only facexray, fwa, sbi, and lsda are currently supported for blending dataset'
-            )
-    elif 'dataset_type' in config and config['dataset_type'] == 'pair':
-        train_set = pairDataset(config, mode='train')  # Only use the pair dataset class in training
-    elif 'dataset_type' in config and config['dataset_type'] == 'iid':
-        train_set = IIDDataset(config, mode='train')
-    elif 'dataset_type' in config and config['dataset_type'] == 'I2G':
-        train_set = I2GDataset(config, mode='train')
-    elif 'dataset_type' in config and config['dataset_type'] == 'lrl':
-        train_set = LRLDataset(config, mode='train')
-    elif 'dataset_type' in config and config['dataset_type'] == 'verihubs':
-        train_set = StratifiedSourceDataset(
-            config['train_dataset'],json_folder=config['dataset_json_folder'], train=True
-        )
-        live_source_indices_dict = train_set.live_source_indices
-        str_live = []
-        for k,v in live_source_indices_dict.items():
-            str_live.append(f"{k} {len(v)}")
+    train_set = StratifiedSourceDataset(
+        config['train_dataset'],json_folder=config['dataset_json_folder'], train=True,
+        dataset_percentage=config['dataset_percentage']
+    )
+    indices_source_live_dict = train_set.indices_source_live
+    str_live = []
+    for k,v in indices_source_live_dict.items():
+        str_live.append(f"{k} {len(v)}")
 
-        str_live = '|'.join(str_live)
-        logger.info(str_live)
+    str_live = '|'.join(str_live)
+    print("HERE!!")
+    print(str_live)
+    print("THERE!!")
+    logger.info(str_live)
 
-        deepfake_source_indices_dict = train_set.deepfake_source_indices
-        str_deepfake = []
-        for k,v in deepfake_source_indices_dict.items():
-            str_deepfake.append(f"{k} {len(v)}")
+    indices_source_deepfake_dict = train_set.indices_source_deepfake
+    str_deepfake = []
+    for k,v in indices_source_deepfake_dict.items():
+        str_deepfake.append(f"{k} {len(v)}")
+    
+    str_deepfake = '|'.join(str_deepfake)
+    logger.info(str_deepfake)
         
-        str_deepfake = '|'.join(str_deepfake)
-        logger.info(str_deepfake)
-    else:
-        train_set = DeepfakeAbstractBaseDataset(
-                    config=config,
-                    mode='train',
-                )
-        
-    if config['model_name'] == 'lsda':
-        from dataset.lsda_dataset import CustomSampler
-        custom_sampler = CustomSampler(num_groups=2*360, n_frame_per_vid=config['frame_num']['train'], batch_size=config['train_batchSize'], videos_per_group=5)
-        train_data_loader = \
-            torch.utils.data.DataLoader(
-                dataset=train_set,
-                batch_size=config['train_batchSize'],
-                num_workers=int(config['workers']),
-                sampler=custom_sampler, 
-                collate_fn=train_set.collate_fn,
-            )
-    elif config['ddp']:
+    if config['ddp']:
         sampler = DistributedSampler(train_set)
         train_data_loader = \
             torch.utils.data.DataLoader(
@@ -155,27 +111,10 @@ def prepare_testing_data(config):
     def get_test_data_loader(config, test_name):
         # update the config dictionary with the specific testing dataset
         config = config.copy()  # create a copy of config to avoid altering the original one
-        if 'dataset_type' in config and config['dataset_type'] == 'verihubs':
-            #test_set = DeepFakeDataset(
-            #    config['test_dataset'],json_folder=config['dataset_json_folder'], train=False
-            #)
-            test_set = DeepFakeDataset(
-                test_name,json_folder=config['dataset_json_folder'], train=False
-            )
+        test_set = DeepFakeDataset(
+            test_name,json_folder=config['dataset_json_folder'], train=False
+        )
             
-        else:
-            config['test_dataset'] = test_name  # specify the current test dataset
-            if not config.get('dataset_type', None) == 'lrl':
-                test_set = DeepfakeAbstractBaseDataset(
-                        config=config,
-                        mode='test',
-                )
-            else:
-                test_set = LRLDataset(
-                    config=config,
-                    mode='test',
-                )
-
         test_data_loader = \
             torch.utils.data.DataLoader(
                 dataset=test_set,
@@ -196,33 +135,14 @@ def prepare_testing_data(config):
 
 def choose_optimizer(model, config):
     opt_name = config['optimizer']['type']
-    if opt_name == 'sgd':
-        optimizer = optim.SGD(
-            params=model.parameters(),
-            lr=config['optimizer'][opt_name]['lr'],
-            momentum=config['optimizer'][opt_name]['momentum'],
-            weight_decay=config['optimizer'][opt_name]['weight_decay']
-        )
-        return optimizer
-    elif opt_name == 'adam':
-        optimizer = optim.Adam(
-            params=model.parameters(),
-            lr=config['optimizer'][opt_name]['lr'],
-            weight_decay=config['optimizer'][opt_name]['weight_decay'],
-            betas=(config['optimizer'][opt_name]['beta1'], config['optimizer'][opt_name]['beta2']),
-            eps=config['optimizer'][opt_name]['eps'],
-            amsgrad=config['optimizer'][opt_name]['amsgrad'],
-        )
-        return optimizer
-    elif opt_name == 'sam':
-        optimizer = SAM(
-            model.parameters(), 
-            optim.SGD, 
-            lr=config['optimizer'][opt_name]['lr'],
-            momentum=config['optimizer'][opt_name]['momentum'],
-        )
-    else:
-        raise NotImplementedError('Optimizer {} is not implemented'.format(config['optimizer']))
+    optimizer = optim.Adam(
+        params=model.parameters(),
+        lr=config['optimizer'][opt_name]['lr'],
+        weight_decay=config['optimizer'][opt_name]['weight_decay'],
+        betas=(config['optimizer'][opt_name]['beta1'], config['optimizer'][opt_name]['beta2']),
+        eps=config['optimizer'][opt_name]['eps'],
+        amsgrad=config['optimizer'][opt_name]['amsgrad'],
+    )
     return optimizer
 
 
@@ -267,7 +187,7 @@ def main():
     with open(args.detector_path, 'r') as f:
         config = yaml.safe_load(f)
     # update with train_config
-    with open('./training/config/vhubs_train_config.yaml', 'r') as f:
+    with open('config/vhubs_train_config.yaml', 'r') as f:
         config2 = yaml.safe_load(f)
     if 'label_dict' in config:
         config2['label_dict']=config['label_dict']
@@ -350,8 +270,6 @@ def main():
             logger.info(f"===> Epoch[{epoch}] end with testing {metric_scoring}: {parse_metric_for_print(best_metric)}!")
     logger.info("Stop Training on best Testing metric {}".format(parse_metric_for_print(best_metric))) 
     # update
-    if 'svdd' in config['model_name']:
-        model.update_R(epoch)
     if scheduler is not None:
         scheduler.step()
 

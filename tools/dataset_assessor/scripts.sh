@@ -1,1 +1,1 @@
-python run_attribute_json.py --json_path result_200k_live_face_dataset.json --dataset_name 200k_live_face_dataset --dir_images /mnt/ssd/datasets/deepfake/200k_live_face_dataset/live
+CUDA_VISIBLE_DEVICES=1 python run_attribute_json_fd-3-1-0.py --json_path result_200k_live_face_dataset.json --dataset_name 200k_live_face_dataset --dir_images /mnt/ssd/datasets/deepfake/200k_live_face_dataset/live

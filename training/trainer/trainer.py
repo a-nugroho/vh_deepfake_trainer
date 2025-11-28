@@ -354,7 +354,7 @@ class Trainer(object):
         else:
             times_per_epoch = 1
         
-        times_per_epoch=4
+        times_per_epoch=1
         #times_per_epoch=1000
 
         test_step = len(train_data_loader) // times_per_epoch    # test 4 times per epoch
@@ -369,7 +369,7 @@ class Trainer(object):
         
         last_idx = len(train_data_loader) - 1
         
-        for batch_idx, (input_live, input_fake, target_live, target_fake, *additional_input) in enumerate(train_data_loader):
+        for batch_idx, (input_live, input_fake, target_live, target_fake, *additional_input) in enumerate(tqdm(train_data_loader)):
             iteration = batch_idx
             last_batch = batch_idx == last_idx
             input_live, target_live = input_live.cuda(), target_live.cuda()
@@ -509,8 +509,15 @@ class Trainer(object):
         pred = np.where(prob > 0.5, 1, 0)
         judge = (pred == label)
         zero_num = len(label) - np.count_nonzero(label)
-        acc_fake = np.count_nonzero(judge[zero_num:]) / len(judge[zero_num:])
-        acc_real = np.count_nonzero(judge[:zero_num]) / len(judge[:zero_num])
+        if(zero_num==0):
+            acc_real = 1
+        else:
+            acc_real = np.count_nonzero(judge[:zero_num]) / len(judge[:zero_num])
+        
+        if(np.count_nonzero(label)==0):
+            acc_fake = 1
+        else:
+            acc_fake = np.count_nonzero(judge[zero_num:]) / len(judge[zero_num:])
         return acc_real,acc_fake
 
     def test_one_dataset(self, data_loader):

@@ -1,0 +1,1 @@
+python create_json.py --base_dir /mnt/ssd/datasets/deepfake/reswapper_v2/enhanced --output_json mnt/ssd/datasets/deepfake/dataset_json/reswapper_v2.json

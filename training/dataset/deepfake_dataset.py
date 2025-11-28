@@ -16,205 +16,326 @@ import dataset.utils.aug.border as border
 from collections import defaultdict
 
 
-
-class DeepfakeDataset(Dataset):
-    def __init__(self, config,
-                train = True, 
-                transform = None,
-                normalize = True,
-                aug_rotate = True,
-                aug_blur = True,
-                aug_lowq = True,
-                aug_crop = True,
-                pair_mode = False,
-                mean = [0.48145466, 0.4578275, 0.40821073],
-                std = [0.26862954,0.26130258,0.27577711],
-                size_image = 224,ssl = False):
-        
-        paths_json = config["paths_json"]
-        folder_json = config["folder_json"]
-        self.pair_mode = pair_mode
-        # Dummy data
-        #self.data = torch.arange(100)  # pretend inputs
-        transform_default = [T.Resize(size_image),T.CenterCrop((size_image,size_image))]
-
+class DeepFakeDataset(Dataset):
+    def __init__(self, json_paths,json_folder=None, train=True, ssl=False, transform=None):
         self.data = []
-        self.paths_image_live = []
-        self.paths_image_deepfake = []
-        self.labels_live = []
-        self.labels_deepfake = []
-        self.sources_live = []
-        self.sources_deepfake = []
+        if isinstance(json_paths, str):
+            json_path = json_paths
+            if json_folder:
+                json_path = os.path.join(json_folder,json_path+'.json')
 
-        if isinstance(paths_json, str):
-            path_json = paths_json
-            if folder_json:
-                path_json = os.path.join(folder_json,path_json+'.json')
-
-            with open(path_json, 'r') as f:
+            with open(json_path, 'r') as f:
                 self.data.extend(json.load(f).items())
+
         else:
-            for path_json in paths_json:
-                if folder_json:
-                    path_json = os.path.join(folder_json,path_json+'.json')
+            for json_path in json_paths:
+                if json_folder:
+                    json_path = os.path.join(json_folder,json_path+'.json')
 
-                with open(path_json, 'r') as f:
-                    metadata = json.load(f)
-
-                for path_img, info_img in metadata.items():
-                    self.process_data(info_img, path_img, path_json)
-            
-                
-        self.indices_source_live, self.indices_source_deepfake = self._build_source_indices()
-
-        self.len_live = len(self.paths_image_live)
-        self.len_deepfake = len(self.paths_image_deepfake)
+                with open(json_path, 'r') as f:
+                    self.data.extend(json.load(f).items())
 
         self.train = train
         self.ssl = ssl
 
-        to_tensor = [T.ToTensor()]
-            
-        if normalize:
-            to_tensor = to_tensor + [T.Normalize(mean=mean,std=std)]
-        
-        def_hor_flip = 0.5
-        def_random_rot = 15
-        def_gauss_blur = [.1, 2.]
-        def_gauss_p = 0.5
-        def_downsampling_range = (0.33,0.8)
-        def_downsampling_p = 0.25
-        def_simlow_p = 0.5
+        if transform is None:
+            if not train:
+                self.transform = T.Compose([
+                    T.Resize(224),
+                    T.CenterCrop(224),
+                    #T.Resize(384),
+                    #T.ToTensor(),
+                    # Because prefetcher
+                    #T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                ])
 
-        transform_aug_rotate = [T.RandomHorizontalFlip(p=def_hor_flip),
-                    T.RandomRotation(degrees=def_random_rot)]
-        transform_aug_blur = [T.RandomApply([low_quality.SimCLRGaussianBlur(sigma=def_gauss_blur)], p=def_gauss_p)]
-        transform_aug_lowq = [low_quality.RandomDownUpSampler(p=def_downsampling_p,downsampling_range=def_downsampling_range),
-                    low_quality.SimulateLowQuality(p=def_simlow_p)]
-        transform_aug_crop = [crop.RandomZoomCrop(perc_range=(0.9, 1.0)), border.RandomBorder(border_amount=(0.001, 0.15), p=0.5)]
+                to_tensor = [T.ToTensor(),
+                T.Normalize(mean=[0.48145466, 0.4578275, 0.40821073],
+                std=[0.26862954,0.26130258,0.27577711])]
+                
+                self.transform = T.Compose(self.transform.transforms + to_tensor)
+
+            else:
+                # self.transform = T.Compose([
+                #     T.RandomHorizontalFlip(),
+                #     T.ToTensor(),
+                #     T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                # ])
+                self.transform = T.Compose([
+                    T.RandomHorizontalFlip(p=0.5),
+                    #T.RandomVerticalFlip(p=0.5),
+                    low_quality.RandomDownUpSampler(p=0.25),
+                    low_quality.SimulateLowQuality(p=0.25),
+                    crop.RandomZoomCrop(perc_range=(0.9, 1.0)),
+                    border.RandomBorder(border_amount=(0.001, 0.15), p=0.5),
+                    #border.RandomBorder(border_amount=(0.001, 0.15), p=0.5),
+                    #T.Resize(448),
+                    T.Resize(224),
+                    # because prefetcher
+                    #T.ToTensor(),
+                    #T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) #Disable this if using prefetcher
+                ])
+
+                to_tensor = [T.ToTensor(),
+                T.Normalize(mean=[0.48145466, 0.4578275, 0.40821073],
+                std=[0.26862954,0.26130258,0.27577711])]
+
+                self.transform = T.Compose(self.transform.transforms + to_tensor)
+
+        else:
+            self.transform = transform
+        
+        self.data_dict = {
+            'image': [i[0] for i in self.data],
+            'label': [i[1] for i in self.data], 
+        }
+
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        img_path, metadata = self.data[idx]
+        
+        label = metadata['label']  # 0 = real, 1 = deepfake
+        img_path = metadata['processed_path']
+        #if 'DF40/eval/' in img_path:
+        #    img_path = os.path.join("/mnt/ssd2/dataset/"+img_path)
+
+
+        # Step 1 & 2: Load image with OpenCV and convert to RGB
+        img = cv2.imread(img_path)
+        if img is None:
+            raise FileNotFoundError(f"Image not found at {img_path}")
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        """
+        # Step 3: Resize using cv2.resize
+        img = cv2.resize(img, (448, 448))  # Resize to 224x224
+
+        # Step 4: Optional manipulations (e.g., for training)
+        if self.train:
+            # Convert to HSV for saturation adjustment
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+            if np.random.randint(2):  # Randomly adjust saturation
+                img[..., 1] = np.clip(img[..., 1] * np.random.uniform(0.8, 1.2), 0, 255)
+            img = cv2.cvtColor(img, cv2.COLOR_HSV2RGB)
+        """
+        # Step 5: Convert to PIL Image
+        img = Image.fromarray(img)
+        # img = Image.fromarray(img).resize((224, 224))
+
+        # Step 6: Apply transforms and return
+        if self.train:
+            if self.ssl:
+                # For self-supervised learning, return multiple augmented views
+                return self.transform(img), self.ssl_transforms(img), self.ssl_transforms(img), label
+            else:
+                return self.transform(img), label
+        else:
+            #return self.transform(img), label, img_path
+            return self.transform(img), label
+
+
+class StratifiedSourceDataset(Dataset):
+    def __init__(self, json_paths, json_folder=None, train=True, ssl=False, 
+                 transform=None, dataset_percentage=None):
+        
+        # Dummy data
+        #self.data = torch.arange(100)  # pretend inputs
+        self.data = []
+        self.live_image_paths = []
+        self.live_labels = []
+        self.live_sources = []
+        self.deepfake_image_paths = []
+        self.deepfake_labels = []
+        self.deepfake_sources = []
+        self.dataset_percentage = dataset_percentage
+        for json_path in json_paths:
+            if json_folder:
+                json_path = os.path.join(json_folder,json_path+'.json')
+
+            with open(json_path, 'r') as f:
+                metadata = json.load(f)
+            metadata_keys = list(metadata.keys())
+            json_name = json_path.split("/")[-1].split(".")[0]
+            if dataset_percentage is not None:
+                if json_name in dataset_percentage:
+                    metadata_keys = metadata_keys[:int(dataset_percentage[json_name]*len(metadata_keys))]
+            
+            metadata = {d: metadata[d] for d in metadata_keys}
+            for img_path, info in metadata.items():
+                self.process_data(info, img_path, json_path)
+                
+            #with open(json_path, 'r') as f:
+            #    self.data.extend(json.load(f).items())
+        
+        self.indices_source_live, self.indices_source_deepfake = self._build_source_indices()
+
+        self.live_len = len(self.live_image_paths)
+        self.deepfake_len = len(self.deepfake_image_paths)
+        self.train = train
+        self.ssl = ssl
 
         if transform is None:
             if not train:
-                self.transform =  transform_default
-            
-            else:
-                self.transform = []
-                if aug_rotate:
-                    self.transform.extend(transform_aug_rotate)
-                if aug_blur:
-                    self.transform.extend(transform_aug_blur)
-                if aug_lowq:
-                    self.transform.extend(transform_aug_lowq)
-                if aug_crop:
-                    self.transform.extend(transform_aug_crop)
-                
-                self.transform.extend(transform_default)
+                self.transform = T.Compose([
+                    T.Resize(224),
+                    T.CenterCrop((224,224)),
+                    #T.Resize(384),
+                    #T.CenterCrop((384,384)),
+                    #.ToTensor(),
+                    # Because prefetcher
+                    #T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                ])
 
-            self.transform = T.Compose(self.transform + to_tensor)
-        
+                to_tensor = [T.ToTensor(),
+                T.Normalize(mean=[0.48145466, 0.4578275, 0.40821073],
+                std=[0.26862954,0.26130258,0.27577711])]
+                
+                self.transform = T.Compose(self.transform.transforms + to_tensor)
+            else:
+                # self.transform = T.Compose([
+                #     T.RandomHorizontalFlip(),
+                #     T.ToTensor(),
+                #     T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                # ])
+                self.transform = T.Compose([
+                    T.RandomHorizontalFlip(p=0.5),
+                    T.RandomRotation(degrees=15),
+                    #T.RandomApply([T.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+                    #T.RandomGrayscale(p=0.2),
+                    T.RandomApply([low_quality.SimCLRGaussianBlur(sigma=[.1, 2.])], p=0.5),     
+                    low_quality.RandomDownUpSampler(p=0.25,downsampling_range=(0.33,0.8)),
+                    low_quality.SimulateLowQuality(p=0.5),
+                    
+                    #crop.RandomZoomCrop(perc_range=(0.75, 1.0)),
+                    #border.RandomBorder(border_amount=(0.001, 0.15), p=0.5),
+                    #T.Resize(224),
+                    #T.CenterCrop((224,224)),
+                    
+                    T.RandomResizedCrop(size=(224, 224), scale=(0.66, 1.0)),
+                    border.RandomBlackBorderFixedSizeSquare(max_border_ratio=0.3, p=0.5),
+                    #T.Resize(224),
+                    
+                    #T.RandomVerticalFlip(p=0.5),
+                    #T.Resize(384),
+                    #T.CenterCrop((384,384)),
+                    # because prefetcher
+                    #T.ToTensor(),
+                    #T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) #Disable this if using prefetcher
+                ])
+
+                to_tensor = [T.ToTensor(),
+                T.Normalize(mean=[0.48145466, 0.4578275, 0.40821073],
+                std=[0.26862954,0.26130258,0.27577711])]
+
+                self.transform = T.Compose(self.transform.transforms + to_tensor)
+
+                if ssl:
+                    self.ssl_transforms = T.Compose([
+                        T.RandomResizedCrop(224, scale=(0.08, 1.)),
+                        T.RandomApply([T.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+                        T.RandomGrayscale(p=0.2),
+                        T.RandomApply([low_quality.SimCLRGaussianBlur(sigma=[.1, 2.])], p=0.5),  # Corrected usage
+                        T.RandomHorizontalFlip(),
+                        T.ToTensor(),
+                        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                    ])
         else:
             self.transform = transform
 
-        if self.pair_mode:
-            self.data_dict = {
-                'image': self.paths_image_live +self.paths_image_deepfake, 
-                'label': self.labels_live+self.labels_deepfake, 
-            }
-        else:
-            self.data_dict = {
-                'image': [i[0] for i in self.data],
-                'label': [i[1] for i in self.data], 
-            }
+        self.data_dict = {
+            'image': self.live_image_paths+self.deepfake_image_paths, 
+            'label': self.live_labels+self.deepfake_labels, 
+        }
+        #print(self.transform)
         
     def _build_source_indices(self):
         indices_source_live = defaultdict(list)
-        for idx, source in enumerate(self.sources_live):
+        for idx, source in enumerate(self.live_sources):
             indices_source_live[source].append(idx)
         
         indices_source_deepfake = defaultdict(list)
-        for idx, source in enumerate(self.sources_deepfake):
+        for idx, source in enumerate(self.deepfake_sources):
             indices_source_deepfake[source].append(idx)
         return dict(indices_source_live), dict(indices_source_deepfake)
+    
 
     def __len__(self):
-        return max(self.len_live, self.len_deepfake)
+        return max(self.live_len, self.deepfake_len)
     
     def __min_len__(self):
-        return min(self.len_live, self.len_deepfake)
+        return min(self.live_len, self.deepfake_len)
     
-    def load_image(self, path_image):
+    def load_image(self, image_path):
         try:
-            image = Image.open(path_image).convert("RGB")
+            image = Image.open(image_path).convert("RGB")
             return image
         except Exception as e:
-            print(f"Error loading image at path {path_image}: {e}")
+            print(f"Error loading image at path {image_path}: {e}")
             return None
         
     def __getitem__(self, tuple_idxs):
-        if self.pair_mode:
-            idx_live, idx_deepfake = tuple_idxs
-            while True:
-                try:
-                    # Get live image and its label
-                    idx_live = idx_live % self.len_live #Ensure no overflow
-                    image_live = self.load_image(
-                        self.paths_image_live[idx_live]
-                    )
-                    live_label = self.labels_live[idx_live]
+        #print(tuple_idxs)
+        live_images = []
+        deepfake_images = []
+        live_labels = []
+        deepfake_labels = []
+        #for idx_live, idx_deepfake in tuple_idxs:
+        idx_live, idx_deepfake = tuple_idxs
+        while True:
+            try:
+                # Get live image and its label
+                live_idx = idx_live % self.live_len
+                live_image = self.load_image(
+                    self.live_image_paths[live_idx]
+                )
+                live_label = self.live_labels[live_idx]
 
-                    # Get deepfake image and its label
-                    idx_deepfake = idx_deepfake % self.len_deepfake
-                    image_deepfake = self.load_image(
-                        self.paths_image_deepfake[idx_deepfake]
-                    )
-                    label_deepfake = self.labels_deepfake[idx_deepfake]
-                    return self.transform(image_live), self.transform(image_deepfake), live_label, label_deepfake
-                    #self.sources_live[live_idx], self.sources_deepfake[deepfake_idx] 
-                    
-                    
-                except Exception as e:
-                    print(f"Error loading image at index {idx_live}: {e}")
-                    idx_live = (idx_live + 1) % self.len_live
+                # Get deepfake image and its label
+                deepfake_idx = idx_deepfake % self.deepfake_len
+                deepfake_image = self.load_image(
+                    self.deepfake_image_paths[deepfake_idx]
+                )
+                deepfake_label = self.deepfake_labels[deepfake_idx]
+                #live_images.append(self.transform(live_image))
+                #deepfake_images.append(self.transform(deepfake_image))
+                #live_labels.append(live_label)
+                #deepfake_labels.append(deepfake_label)
+                #self.live_sources[live_idx] 
+                #self.deepfake_sources[deepfake_idx]
+                return self.transform(live_image), self.transform(deepfake_image), live_label, deepfake_label
+                #self.live_sources[live_idx], self.deepfake_sources[deepfake_idx] 
+                
+                
+            except Exception as e:
+                print(f"Error loading image at index {idx_live}: {e}")
+                idx_live = (idx_live + 1) % self.live_len
         
-        else:
-            idx = tuple_idxs
-            path_image, metadata = self.data[idx]
-        
-            label = metadata['label']
-            path_image = metadata['processed_path']
-            image = self.load_image(path_image)
-            image = Image.fromarray(image)
-            
-            return self.transform(image), label
-
-    def process_data(self, info, path_json):
+        #return torch.stack(live_images), torch.stack(deepfake_images), torch.stack(live_labels), torch.stack(deepfake_labels)
+    
+    def process_data(self, info, img_path, json_path):
         """
         Processes training data and appends paths and labels for both live and deepfake images.
 
         Args:
             info (dict): Metadata of the image.
-            path_image (str): Path to the image in the JSON metadata.
+            img_path (str): Path to the image in the JSON metadata.
         """
-        if self.pair_mode:
-            if info["label"] == 0:
-                self.paths_image_live.append(
-                    os.path.join("data", info["processed_path"])
-                )
-                self.labels_live.append(info["label"])
-                self.sources_live.append(path_json)
-
-            else:
-                self.paths_image_deepfake.append(
-                    os.path.join("data", info["processed_path"])
-                )
-                
-                self.labels_deepfake.append(info["label"])
-                self.sources_deepfake.append(path_json)
+        if info["label"] == 0:
+            self.live_image_paths.append(
+                os.path.join("data", info["processed_path"])
+            )
+            self.live_labels.append(info["label"])
+            self.live_sources.append(json_path)
 
         else:
-            with open(path_json, 'r') as f:
-                self.data.extend(json.load(f).items())
-
+            self.deepfake_image_paths.append(
+                os.path.join("data", info["processed_path"])
+            )
+            
+            self.deepfake_labels.append(info["label"])
+            self.deepfake_sources.append(json_path)
 
 class ProportionalStratifiedBatchSampler(Sampler):
     def __init__(self, dataset, batch_size, drop_last=False, seed=42, print_info=True):

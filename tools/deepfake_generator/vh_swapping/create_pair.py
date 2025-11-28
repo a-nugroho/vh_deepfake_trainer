@@ -4,15 +4,17 @@ import random
 from itertools import chain
 from collections import Counter
 import copy
+import argparse
+from tqdm import tqdm
+#dataset_name = "taspen_photos"
 
-dataset_name = "taspen_photos"
-
-dir_repo = "/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/tools/"
-path_json = os.path.join(dir_repo,f"dataset_assessor/result_{dataset_name}.json")
-
-dir_att = os.path.join(dir_repo,f"dataset_assessor/results_att/{dataset_name}")
-
-dir_json =  os.path.join(dir_repo,f"deepfake_generator/vh_swapping/collection/")
+def read_args():
+    parser = argparse.ArgumentParser(description="Template script with named arguments")
+    # Example arguments
+    parser.add_argument("--dataset_name","-d", required=False, help="Dataset name")
+    parser.add_argument("--suffix_output","--s",required=False, default=None)
+    args = parser.parse_args()
+    return args
 
 def match(v, criteria):
     for key, rule in criteria.items():
@@ -142,58 +144,90 @@ def merge_nested_existing_only(A, B):
 THRESHOLD_BLUR = 50
 THRESHOLD_DARK = 50
 
-add_suffix_output = []
-suffix_output = "-".join(add_suffix_output+[".json"])
-path_output_json = os.path.join(dir_json,"-".join(["pair",f"{dataset_name}",suffix_output]))
-with open(path_json, 'r') as f:
-    # Parsing the JSON file into a Python dictionary
-    data_source = json.load(f)
+def main():
 
+    args = read_args()
+    dataset_name = args.dataset_name
+    root_dir = "/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/tools/"
+    prefix = "result_"
+    path_json = os.path.join(root_dir,f"dataset_assessor/{prefix}{dataset_name}.json")
+    dir_att = os.path.join(root_dir,f"dataset_assessor/results_att_fd3-1-0-24Nov/{dataset_name}")
+    dir_json =  os.path.join(root_dir,f"deepfake_generator/vh_swapping/collection/")
 
-dict_att_json = read_att_json(dir_att)
-data_source = merge_nested_dicts(*[data_source,dict_att_json],mode="existing_only")
-data_filtered = {}
-for path_now, d_now in data_source.items():
-    # Filter on Blur
-    if ((d_now['score_blur_face']<THRESHOLD_BLUR) & 
-        (d_now['score_dark']<THRESHOLD_DARK)
-    ):
-        data_filtered[path_now] = d_now
+    if args.suffix_output:
+        suffix_output = f"-{args.suffix_output}.json"
+    else:
+        add_suffix_output = []
+        suffix_output = ".json"
 
+    #suffix_output = "-".join(add_suffix_output+[".json"])
+    path_output_json = os.path.join(dir_json,f"pair-{dataset_name}{suffix_output}")
+    with open(path_json, 'r') as f:
+        # Parsing the JSON file into a Python dictionary
+        data_source = json.load(f)
 
-data_completed = {}
-swap_pair_list = []
-
-#print(data_source["../../datasets/deepfake/vh_55plus/raw_images/taspen_photos/13.jpg"])
-#print(dict_att_json["../../datasets/deepfake/vh_55plus/raw_images/taspen_photos/13.jpg"])
-
-for key_now, value_now in data_filtered.items():
-    try:
-        pred_age = value_now["pred_age"]
-        pred_gender = value_now["pred_gender"]
-        list_criteria = [ 
-        {"pred_age": {"op": "==", "value": pred_age}},
-        {"score_blur_face": {"op": "<=", "value": 50}},
-        {"pred_gender": {"op": "==", "value": pred_gender}}
-        ]
-        dict_collection = get_pair_candidates(list_criteria,data_filtered)
-        swap_pair = get_pair_key(key_now,dict_collection)
-        swap_pair_list.append(swap_pair)
-        value_now['swap_pair_path'] = swap_pair
+    if "200k_live_face_dataset" in path_json:
+        data_source_new = {}
+        for k, v in data_source.items():
+            k_new = k.replace("/processes","")
+            data_source_new[k_new] = v
         
-        for k, v in value_now.items():
-            if type(v) == str:
-                value_now[k] = v.replace("../../","/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/")
-        key_now = key_now.replace("../../","/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/")
-        data_completed[key_now] = {k: value_now[k] for k in ["path","status","swap_pair_path"] if k in value_now} 
-        #for subkey_now, subdict_now in data_completed.items():
-        #    subkey_now = subkey_now.replace("../../","/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/")
-        #    for subsubkey_now, subsubvalue_now in subdict_now.items():
-        #        subsubvalue_now = subsubvalue_now.replace("../../","/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/")
-        #        subdict_now[subsubkey_now] = subsubvalue_now
+        data_source = data_source_new
 
-        #    data_completed[subkey_now] = subdict_now
-    except:
-        continue
 
-write_json(path_output_json,data_completed)
+
+    dict_att_json = read_att_json(dir_att)
+    data_source = merge_nested_dicts(*[data_source,dict_att_json],mode="existing_only")
+    data_filtered = {}
+    for path_now, d_now in data_source.items():
+        # Filter on Blur
+        if 'score_blur_face' in d_now and 'score_dark' in d_now and 'head_pose' in d_now:
+            if ((d_now['score_blur_face']<THRESHOLD_BLUR) and 
+                (d_now['score_dark']<THRESHOLD_DARK) and
+                (
+                    abs(d_now['head_pose']['yaw'])<10 and
+                    abs(d_now['head_pose']['pitch'])<10 and
+                    abs(d_now['head_pose']['roll'])<10
+                )
+            ):
+                data_filtered[path_now] = d_now
+
+
+    data_completed = {}
+    swap_pair_list = []
+
+    #print(data_source["../../datasets/deepfake/vh_55plus/raw_images/taspen_photos/13.jpg"])
+    #print(dict_att_json["../../datasets/deepfake/vh_55plus/raw_images/taspen_photos/13.jpg"])
+
+    for key_now, value_now in tqdm(data_filtered.items()):
+        try:
+            pred_age = value_now["pred_age"]
+            pred_gender = value_now["pred_gender"]
+            list_pair_criteria = [ 
+            {"pred_age": {"op": "==", "value": pred_age}},
+            {"pred_gender": {"op": "==", "value": pred_gender}}
+            ]
+            dict_collection = get_pair_candidates(list_pair_criteria,data_filtered)
+            swap_pair = get_pair_key(key_now,dict_collection)
+            swap_pair_list.append(swap_pair)
+            value_now['swap_pair_path'] = swap_pair
+            
+            for k, v in value_now.items():
+                if type(v) == str:
+                    value_now[k] = v.replace("../../","/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/")
+            key_now = key_now.replace("../../","/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/")
+            data_completed[key_now] = {k: value_now[k] for k in ["path","status","swap_pair_path"] if k in value_now} 
+            #for subkey_now, subdict_now in data_completed.items():
+            #    subkey_now = subkey_now.replace("../../","/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/")
+            #    for subsubkey_now, subsubvalue_now in subdict_now.items():
+            #        subsubvalue_now = subsubvalue_now.replace("../../","/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/")
+            #        subdict_now[subsubkey_now] = subsubvalue_now
+
+            #    data_completed[subkey_now] = subdict_now
+        except:
+            continue
+
+    write_json(path_output_json,data_completed)
+
+if __name__ == "__main__":
+    main()
