@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 def merge_nested_dicts(*dicts, mode="add_new"):
     """
     Merge multiple nested dictionaries without modifying the originals.

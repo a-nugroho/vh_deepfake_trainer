@@ -347,7 +347,8 @@ class Trainer(object):
         epoch,
         train_data_loader,
         test_data_loaders=None):
-
+        
+        train_data_loader.batch_sampler.set_active_bins([0,1,2])
         self.logger.info("===> Epoch[{0}] start!, Iteration length: {1}".format(epoch,len(train_data_loader)))
         if epoch>=1:
             times_per_epoch = 2
@@ -369,8 +370,9 @@ class Trainer(object):
         
         last_idx = len(train_data_loader) - 1
         
+        
         for batch_idx, (input_live, input_fake, target_live, target_fake, *additional_input) in enumerate(tqdm(train_data_loader)):
-            iteration = batch_idx
+            iteration = batch_idx + epoch*last_idx
             last_batch = batch_idx == last_idx
             input_live, target_live = input_live.cuda(), target_live.cuda()
             input_fake, target_fake = input_fake.cuda(), target_fake.cuda()
@@ -502,6 +504,29 @@ class Trainer(object):
             #        )
             #    break
             #test_best_metric = None
+
+        # run test at the end
+            last_iteration = iteration
+        
+        iteration = last_iteration
+        if test_data_loaders is not None and (not self.config['ddp'] ):
+            self.logger.info("===> Test start!")
+            test_best_metric = self.test_epoch_verihubs(
+                epoch,
+                iteration,
+                test_data_loaders,
+                step_cnt,
+            )
+        elif test_data_loaders is not None and (self.config['ddp'] and dist.get_rank() == 0):
+            self.logger.info("===> Test start!")
+            test_best_metric = self.test_epoch_verihubs(
+                epoch,
+                iteration,
+                test_data_loaders,
+                step_cnt,
+            )
+        else:
+            test_best_metric = None
 
         return test_best_metric
 

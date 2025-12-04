@@ -6,6 +6,7 @@ from collections import Counter
 import copy
 import argparse
 from tqdm import tqdm
+os.chdir("/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer")
 #dataset_name = "taspen_photos"
 
 def read_args():

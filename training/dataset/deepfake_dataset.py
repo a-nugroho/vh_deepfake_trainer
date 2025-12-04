@@ -244,9 +244,15 @@ class StratifiedSourceDataset(Dataset):
         else:
             self.transform = transform
 
+        # For Curriculum Learning
+        dfd_json_path = "/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/tools/dataset_assessor/results_att_fd3-1-0/test_200k_merged_train/dfd_1-0-0.json"
+        self.live_dfty_scores, self.deepfake_dfty_scores = self.get_difficulty_scores(dfd_json_path)
+        self.validate_by_difficulty()
+        
         self.data_dict = {
             'image': self.live_image_paths+self.deepfake_image_paths, 
             'label': self.live_labels+self.deepfake_labels, 
+            #difficulty_score
         }
         #print(self.transform)
         
@@ -304,7 +310,10 @@ class StratifiedSourceDataset(Dataset):
                 #deepfake_labels.append(deepfake_label)
                 #self.live_sources[live_idx] 
                 #self.deepfake_sources[deepfake_idx]
-                return self.transform(live_image), self.transform(deepfake_image), live_label, deepfake_label
+                return (self.transform(live_image), self.transform(deepfake_image), 
+                        live_label, deepfake_label,
+                        self.live_dfty_scores[live_idx], self.deepfake_dfty_scores[deepfake_idx])
+            
                 #self.live_sources[live_idx], self.deepfake_sources[deepfake_idx] 
                 
                 
@@ -337,6 +346,40 @@ class StratifiedSourceDataset(Dataset):
             self.deepfake_labels.append(info["label"])
             self.deepfake_sources.append(json_path)
 
+    def get_difficulty_scores(self,dfd_json_path):
+        path_json = dfd_json_path
+        with open(path_json, 'r') as file:
+            data_json = json.load(file)
+
+        data_json_new = {v["processed_path"]:v for k,v in data_json.items()}
+        live_dfty_scores = [data_json_new[i]['dfd_1-0-0'] if 'dfd_1-0-0' in data_json_new[i] 
+                                else -100 for i in self.live_image_paths]
+        deepfake_dfty_scores = [1-data_json_new[i]['dfd_1-0-0'] if 'dfd_1-0-0' in data_json_new[i] 
+                                    else -100 for i in self.deepfake_image_paths]
+        return live_dfty_scores, deepfake_dfty_scores
+        self.live_valid_indices = [i for i in range(len(self.live_dfty_scores)) if live_dfty_scores[i] >= 0]
+        self.deepfake_valid_indices = [i for i in range(len(self.deepfake_dfty_scores)) if deepfake_dfty_scores[i] >= 0]
+    
+    def validate_by_difficulty(self):
+        live_valid_indices = [i for i in range(len(self.live_dfty_scores)) if self.live_dfty_scores[i] >= 0]
+        deepfake_valid_indices = [i for i in range(len(self.deepfake_dfty_scores)) if self.deepfake_dfty_scores[i] >= 0]
+        temp = [self.live_image_paths[i] for i in live_valid_indices]
+        self.live_image_paths = temp
+        temp = [self.live_dfty_scores[i] for i in live_valid_indices]
+        self.live_dfty_scores = temp
+        temp = [self.deepfake_image_paths[i] for i in deepfake_valid_indices]
+        self.deepfake_image_paths = temp
+        temp = [self.deepfake_dfty_scores[i] for i in deepfake_valid_indices]
+        self.deepfake_dfty_scores = temp
+
+    def progressive_curriculum(self,ds_easy, ds_medium, mix_ratio=0.3):
+        # mix 30% of medium difficulty into easy stage
+        import random
+        idx_easy = list(range(len(ds_easy)))
+        idx_medium = random.sample(range(len(ds_medium)), int(len(ds_medium) * mix_ratio))
+        mixed_idx = idx_easy + idx_medium
+        return torch.utils.data.Subset(ds_easy.dataset, mixed_idx)
+    
 class ProportionalStratifiedBatchSampler(Sampler):
     def __init__(self, dataset, batch_size, drop_last=False, seed=42, print_info=True):
         #assert hasattr(dataset, 'source_to_indices'), "Dataset must have 'source_to_indices'"
@@ -347,7 +390,7 @@ class ProportionalStratifiedBatchSampler(Sampler):
 
         self.indices_source_live = dataset.indices_source_live
         self.indices_source_deepfake = dataset.indices_source_deepfake
-
+        
         str_live = []
         for k,v in self.indices_source_live.items():
             str_live.append(f"{k} {len(v)}")
@@ -391,16 +434,84 @@ class ProportionalStratifiedBatchSampler(Sampler):
         if print_info:
             print(self.batch_sizes_source_live)
             print(self.batch_sizes_source_deepfake)
-            
+
+
+        self.live_dfty_scores = dataset.live_dfty_scores
+        self.deepfake_dfty_scores = dataset.deepfake_dfty_scores
+    
+    def set_active_bins(self, bin_ids):
+        self.active_bins = bin_ids
+
+    def make_bins(self,scores, n_bins=3):
+        return np.quantile(scores, np.linspace(0, 1, n_bins + 1))
+    
+    def group_by_source_and_difficulty(self,indices_by_source, dfty_scores, bin_edges):
+        grouped = {}
+
+        for src, indices in indices_by_source.items():
+            src_groups = {i: [] for i in range(len(bin_edges) - 1)}
+
+            for idx in indices:
+                score = dfty_scores[idx]
+
+                # find which bin this score belongs to
+                bin_id = np.digitize(score, bin_edges) - 1
+                bin_id = max(0, min(bin_id, len(bin_edges) - 2))  # clamp
+
+                src_groups[bin_id].append(idx)
+
+            grouped[src] = src_groups
+
+        return grouped
+
     def __iter__(self):
+        bin_edges_live = self.make_bins(self.live_dfty_scores, n_bins=3)
+
+        live_grouped = self.group_by_source_and_difficulty(
+            self.indices_source_live,
+            self.live_dfty_scores,
+            bin_edges_live
+        )
+
+        #pools_source_live = {
+        #    src: self.rng.permutation(indices).tolist()
+        #    for src, indices in self.indices_source_live.items()
+        #}
         pools_source_live = {
-            src: self.rng.permutation(indices).tolist()
-            for src, indices in self.indices_source_live.items()
+            src: {
+                bin_id: self.rng.permutation(bin_indices).tolist()
+                for bin_id, bin_indices in bins.items() if bin_id in self.active_bins
+            }
+            for src, bins in live_grouped.items()
+        }
+        pools_source_live = {
+            src: [idx for bin_list in bins.values() for idx in bin_list]
+            for src, bins in pools_source_live.items()
         }
 
+        bin_edges_deepfake = self.make_bins(self.deepfake_dfty_scores, n_bins=3)
+
+        deepfake_grouped = self.group_by_source_and_difficulty(
+            self.indices_source_deepfake,
+            self.deepfake_dfty_scores,
+            bin_edges_deepfake
+        )
+
+        #pools_source_deepfake = {
+        #    src: self.rng.permutation(indices).tolist()
+        #    for src, indices in self.indices_source_deepfake.items()
+        #}
+
         pools_source_deepfake = {
-            src: self.rng.permutation(indices).tolist()
-            for src, indices in self.indices_source_deepfake.items()
+            src: {
+                bin_id: self.rng.permutation(bin_indices).tolist()
+                for bin_id, bin_indices in bins.items() if bin_id in self.active_bins
+            }
+            for src, bins in deepfake_grouped.items()
+        }
+        pools_source_deepfake = {
+            src: [idx for bin_list in bins.values() for idx in bin_list]
+            for src, bins in pools_source_deepfake.items()
         }
 
         finished = False
@@ -441,9 +552,10 @@ class ProportionalStratifiedBatchSampler(Sampler):
             if finished or (self.drop_last and len(batch_live) < self.batch_size):
                 break
             
+            #shuffle batch
             self.rng.shuffle(batch_live)
             self.rng.shuffle(batch_deepfake)
-            #shuffle batch
+
             yield zip(batch_live,batch_deepfake)
             iter_batch += 1
 
@@ -458,3 +570,41 @@ class ProportionalStratifiedBatchSampler(Sampler):
             for src in self.sources_deepfake
         )
         return max(ab,cd) 
+
+class CurriculumImageDataset(Dataset):
+    def __init__(self, samples, transform=None):
+        """
+        samples: list of tuples -> (image_path, label, difficulty_score)
+        """
+        self.samples = sorted(samples, key=lambda x: x[2])  # sort by difficulty
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        img_path, label, difficulty = self.samples[idx]
+        img = Image.open(img_path).convert("RGB")
+        
+        if self.transform:
+            img = self.transform(img)
+            
+        return img, label, difficulty
+
+    def split_curriculum(dataset, splits=[0.3, 0.3, 0.4]):
+        N = len(dataset)
+        c1 = int(N * splits[0])
+        c2 = int(N * (splits[0] + splits[1]))
+        
+        ds_easy = torch.utils.data.Subset(dataset, range(0, c1))
+        ds_medium = torch.utils.data.Subset(dataset, range(c1, c2))
+        ds_hard = torch.utils.data.Subset(dataset, range(c2, N))
+        
+        return [ds_easy, ds_medium, ds_hard]
+    
+    def progressive_curriculum(ds_easy, ds_medium, mix_ratio=0.3):
+        # mix 30% of medium difficulty into easy stage
+        idx_easy = list(range(len(ds_easy)))
+        idx_medium = random.sample(range(len(ds_medium)), int(len(ds_medium) * mix_ratio))
+        mixed_idx = idx_easy + idx_medium
+        return torch.utils.data.Subset(ds_easy.dataset, mixed_idx)

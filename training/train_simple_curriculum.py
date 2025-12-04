@@ -119,8 +119,8 @@ def prepare_testing_data(config):
             torch.utils.data.DataLoader(
                 dataset=test_set,
                 batch_size=config['test_batchSize'],
-                #shuffle=False,
-                shuffle=True,
+                shuffle=False,
+                #shuffle=True,
                 num_workers=int(config['workers']),
                 drop_last = (test_name=='DeepFakeDetection'),
             )

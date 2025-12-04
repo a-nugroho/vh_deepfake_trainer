@@ -1,10 +1,19 @@
 import json, os
 
+"""
 json_face_swapped = ["result_e4s_20251103-strictpose.json",
 "result_blendface-strictpose.json",
 "result_inswapper-strictpose.json",
 "result_mobilefaceswap-strictpose.json",
 "result_reswapper-strictpose.json"]
+"""
+json_face_swapped = [
+"200k_24nov_e4s.json",
+"200k_24nov_blendface.json",
+"200k_24nov_inswapper.json",
+"200k_24nov_mobilefaceswap.json",
+"200k_24nov_reswapper.json"
+]
 json_face_real = "200k_live_face_dataset.json"
 dir_json = "/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/dataset_json"
 list_all = []
@@ -27,6 +36,6 @@ with open(json_facereal_path, "r") as f:
 print(list_all[0])
 dict_selected = {k:v for k,v in dict_att.items() if k.split("/")[-1].split(".")[0] in list_all}
 
-output_json = "200k_live_face_dataset_55plus.json"
+output_json = "200k_live_face_24nov.json"
 with open(os.path.join(dir_json,output_json), "w") as f:
     json.dump(dict_selected, f, indent=4)

@@ -7,19 +7,28 @@ dataset_type: 'verihubs'
 SWA: False
 save_avg: True
 log_dir: ./logs/training/
+nEpochs: 20
 train_batchSize: 24
 test_batchSize: 24
 train_dataset : [
-    200k_live_face_dataset_55plus,
-    result_blendface-strictpose,
-    result_inswapper-strictpose,
-    result_mobilefaceswap-strictpose,
-    result_reswapper-strictpose
+    test_200k_24nov_merged_train
+    #test_200k_merged_train
+    #test_200k_train,
+    #test_200k_swapped_train,
+    #200k_live_face_dataset_55plus,
+    #result_blendface-strictpose,
+    #result_inswapper-strictpose,
+    #result_mobilefaceswap-strictpose,
+    #result_reswapper-strictpose
     #result_e4s_20251103-strictpose
 ]
 test_dataset : [
-    200k_live_face_dataset_55plus,
-    result_e4s_20251103-strictpose
+    test_200k_24nov_merged_test
+    #test_200k_merged_train
+    #test_200k_test,
+    #test_200k_swapped_test
+    #200k_live_face_dataset_55plus,
+    #result_e4s_20251103-strictpose
 ]
 dataset_percentage : {
     200k_live_face_dataset: 1.0,

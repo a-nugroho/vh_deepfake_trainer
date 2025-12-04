@@ -21,7 +21,7 @@ from datetime import datetime
 
 # map package name → alternative path
 ALT_MODULE_PATHS = {
-    "face_detection": "/mnt/ssd/workspace/adi/vh_repos_byversion/face-detection/3-1-0/face-production-face-detection/face_detection"
+    "face_detection": "/mnt/ssd/workspace/adi/vh_repos_byversion/face-detection/3-0-0/face-production-face-detection/face_detection"
 }
 
 class AltImportFinder(importlib.abc.MetaPathFinder):
@@ -145,15 +145,15 @@ def read_align_image(fd, image_path, align_face=False):
         return None, None, None, None
     
     #img_cropped = fd.extract_face(img, dets, angle, task="face-iso", return_bbox=True, loose_factor = 0.8,square_crop=True)
-    img_cropped = fd.extract_face(img, dets, angle, task="face-iso", return_bbox=True, loose_factor = 0.8)
+    img_cropped = fd.extract_face(img, dets, angle, task="face-iso", loose_factor = 0.8)
     #img_cropped = fd.extract_face(img, dets, angle, task="face-iso", return_bbox=True, loose_factor = 0.8)
         
     #img_cropped = fd.extract_face(img, dets, angle, task="face-iso", return_bbox=True, loose_factor = 1.5)
     if not align_face:
         img_cropped = img
     # Convert NumPy arrays to lists
-    dets = dets.tolist() if isinstance(dets, np.ndarray) else dets
-    angle = angle.tolist() if isinstance(angle, np.ndarray) else angle
+    #dets = dets.tolist() if isinstance(dets, np.ndarray) else dets
+    #angle = angle.tolist() if isinstance(angle, np.ndarray) else angle
 
     return img_cropped, dets, angle, img
 
@@ -187,44 +187,50 @@ if __name__ == "__main__":
         image_path = os.path.join(root, file)
         relative_path = os.path.join(f"{base_dir}", os.path.relpath(image_path, base_dir))
         #print(relative_path)
-        try:
+        if "uniface" in base_dir or "blendface" in base_dir:
+            align_face=False
+        else:
+            align_face=True
             
-            if "uniface" in base_dir or "blendface" in base_dir:
-                align_face=False
-            else:
-                align_face=True
-                
-            img_cropped, dets, angle, image = read_align_image(fd,image_path,align_face)
-            yaw, pitch, roll = None, None, None
-            if dets:
-                outputs = fd.headpose_detector.infer(image, dets[:, :4])
-                yaw, pitch, roll = outputs[0]
+        img_cropped, dets, angle, image = read_align_image(fd,image_path,align_face)
+        if img_cropped is None:
+            logging.info(f"No Face detected on: {relative_path}")
+            continue
 
-            # Get label and method
-            label, method = get_label_and_method(relative_path)
-            
-            target_path = save_image(args.target_dir, file, img_cropped)
+        yaw, pitch, roll = None, None, None
+        if dets is not None:
+            outputs = fd.headpose_detector.infer(image, dets[:, :4])
+            yaw, pitch, roll = outputs[0]
+            if abs(yaw)>10 or abs(pitch)>10 or abs(roll)>10:
+                continue
 
-            # Save the extracted data
-            dataset_info[index] = {
-                "image_path": relative_path,
-                "processed_path": target_path,
-                "label": label,
-                "method": method,
-                "dets": dets,
-                "angle": angle,
-                "head_pose":{"yaw":yaw.astype(float) if yaw else None, 
-                             "pitch":pitch.astype(float) if pitch else None, 
-                             "roll": roll.astype(float) if roll else None}
-            }
-            
-            # Log file successfully read
-            logging.info(f"Processed file: {relative_path} successfully")
+        # Get label and method
+        label, method = get_label_and_method(relative_path)
+        
+        target_path = save_image(args.target_dir, file, img_cropped)
+        dets = dets.tolist() if isinstance(dets, np.ndarray) else dets
+        angle = angle.tolist() if isinstance(angle, np.ndarray) else angle
 
-            index += 1  # Update index
-        except Exception as e:
-            # Log any error that occurs
-            logging.error(f"Failed to Process file: {relative_path} | Error: {e}")
+        # Save the extracted data
+        dataset_info[index] = {
+            "image_path": relative_path,
+            "processed_path": target_path,
+            "label": label,
+            "method": method,
+            "dets": dets,
+            "angle": angle,
+            "head_pose":{"yaw":yaw.astype(float) if yaw else None, 
+                            "pitch":pitch.astype(float) if pitch else None, 
+                            "roll": roll.astype(float) if roll else None}
+        }
+        
+        # Log file successfully read
+        logging.info(f"Processed file: {relative_path} successfully")
+
+        index += 1  # Update index
+        #except Exception as e:
+        #    # Log any error that occurs
+        #    logging.error(f"Failed to Process file: {relative_path} | Error: {e}")
             
 
     print(f"Total processed images: {index}")
