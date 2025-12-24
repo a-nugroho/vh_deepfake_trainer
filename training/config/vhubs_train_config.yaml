@@ -4,14 +4,27 @@ dry_run: false
 dataset_root_rgb: './datasets'
 dataset_json_folder: '/mnt/ssd/datasets/deepfake/dataset_json/'
 dataset_type: 'verihubs'
+#dfd_json_path: [
+#    '/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/tools/dataset_assessor/results_att_fd3-1-0/test_200k_24nov_merged_train/dfd_1-0-0.json',
+#    /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/tools/dataset_assessor/results_att_fd3-1-0/facebook_dfdc_train_reduced_rev/dfd_1-0-0.json,
+#    /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/tools/dataset_assessor/results_att_fd3-1-0/faceforensics++_train/dfd_1-0-0.json,
+#    /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/tools/dataset_assessor/results_att_fd3-1-0/df40_train_fs_reduced/dfd_1-0-0.json
+#]
+
+dfd_json_path: False
 SWA: False
 save_avg: True
 log_dir: ./logs/training/
 nEpochs: 20
 train_batchSize: 24
-test_batchSize: 24
+test_batchSize: 64
 train_dataset : [
-    test_200k_24nov_merged_train
+    training_indonesian_deepfake_dataset_v2_updated,
+    df40_train_fs_official,
+    #df40_train_fsonly_rev,
+    facebook_dfdc_train_reduced_rev,
+    test_200k_24nov_merged_train,
+    reswapper_v2_train
     #test_200k_merged_train
     #test_200k_train,
     #test_200k_swapped_train,
@@ -23,7 +36,12 @@ train_dataset : [
     #result_e4s_20251103-strictpose
 ]
 test_dataset : [
-    test_200k_24nov_merged_test
+    #evaluation_indonesian_deepfake_dataset_v2_updated,
+    #test_200k_24nov_merged_test,
+    #reswapper_v2_test,
+    #faceforensics++_val,
+    #df40_train_fs_reduced
+    facebook_dfdc_test_rev
     #test_200k_merged_train
     #test_200k_test,
     #test_200k_swapped_test
@@ -31,6 +49,8 @@ test_dataset : [
     #result_e4s_20251103-strictpose
 ]
 dataset_percentage : {
+    training_indonesian_deepfake_dataset_v2_updated: 0.2,
+    test_200k_24nov_merged_train: 0.3,
     200k_live_face_dataset: 1.0,
     result_e4s_20251103: 1.0
 }

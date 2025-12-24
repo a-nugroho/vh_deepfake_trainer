@@ -1,3 +1,16 @@
+#python create_dataset-strictpose-noalign.py --base_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/fake/inswapper --output_json 200k_24nov_inswapper-strictnoalign.json --target_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov-strictnoalign/processed/fake/inswapper
+
+python create_dataset-strictpose-noalign.py --base_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/fake/blendface --output_json 200k_24nov_blendface-strictnoalign.json --target_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov-strictnoalign/processed/fake/blendface
+
+#python create_dataset-strictpose-noalign.py --base_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/fake/mobilefaceswap --output_json 200k_24nov_mobilefaceswap-strictnoalign.json --target_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov-strictnoalign/processed/fake/mobilefaceswap
+
+#python create_dataset-strictpose-noalign.py --base_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/fake/uniface --output_json 200k_24nov_uniface-strictnoalign.json --target_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov-strictnoalign/processed/fake/uniface
+
+#python create_dataset-strictpose-noalign.py --base_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/fake/e4s --output_json 200k_24nov_e4s-strictnoalign.json --target_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov-strictnoalign/processed/fake/e4s
+
+#python create_dataset-strictpose-noalign.py --base_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/fake/reswapper --output_json /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/dataset_json/200k_24nov_reswapper-strictnoalign.json --target_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov-strictnoalign/processed/fake/reswapper
+
+
 ###
 #python create_dataset.py --base_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/fake/inswapper --output_json 200k_24nov_inswapper.json --target_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/processed/fake/inswapper
 
@@ -9,7 +22,7 @@
 
 #python create_dataset.py --base_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/fake/e4s --output_json 200k_24nov_e4s.json --target_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/processed/fake/e4s
 
-python create_dataset.py --base_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/fake/reswapper --output_json /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/dataset_json/200k_24nov_reswapper.json --target_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/processed/fake/reswapper
+#python create_dataset.py --base_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/fake/reswapper --output_json /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/dataset_json/200k_24nov_reswapper.json --target_dir /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/datasets/deepfake/200k_24nov/processed/fake/reswapper
 
 ####
 

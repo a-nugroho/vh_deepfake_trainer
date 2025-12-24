@@ -355,7 +355,7 @@ class Trainer(object):
         else:
             times_per_epoch = 1
         
-        times_per_epoch=1
+        times_per_epoch=10
         #times_per_epoch=1000
 
         test_step = len(train_data_loader) // times_per_epoch    # test 4 times per epoch
@@ -553,6 +553,7 @@ class Trainer(object):
         label_lists = []
         
         for i, data_dict in tqdm(enumerate(data_loader),total=len(data_loader)):
+            print(data_dict.keys())
             # get data
             if 'label_spe' in data_dict:
                 data_dict.pop('label_spe')  # remove the specific label

@@ -1,0 +1,29 @@
+import numpy as np
+import matlpotlib.pyplot as plt
+import os
+def plot_multiple(image_paths, image_labels=None,nrow=1,figsize=None):
+    if figsize is None:
+        figsize=(ncol, nrow)
+        
+    ncol = int(np.ceil(len(image_paths)/nrow))
+    print(ncol)
+    fig, ax = plt.subplots(nrow,ncol, figsize=figsize)
+
+    for id_image, image_path in enumerate(image_paths):
+        if os.path.exists(image_path):
+            img_now = cv2.cvtColor(cv2.imread(image_path),cv2.COLOR_BGR2RGB) 
+        else:
+            img_now = image_path
+
+        if nrow>1:
+            ax[id_image%nrow,id_image//nrow].imshow(img_now)
+            ax[id_image%nrow,id_image//nrow].axis("off")
+            if image_labels:
+                ax[id_image%nrow,id_image//nrow].set_title(image_labels[id_image])
+        else:
+            ax[id_image].imshow(img_now)
+            ax[id_image].axis("off")
+            if image_labels:
+                ax[id_image].set_title(image_labels[id_image])
+   
+    return fig,ax

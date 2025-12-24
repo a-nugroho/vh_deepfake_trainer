@@ -65,7 +65,7 @@ def prepare_training_data(config):
     # Only use the blending dataset class in training
     train_set = StratifiedSourceDataset(
         config['train_dataset'],json_folder=config['dataset_json_folder'], train=True,
-        dataset_percentage=config['dataset_percentage']
+        dataset_percentage=config['dataset_percentage'], dfd_json_paths = config['dfd_json_path']
     )
     indices_source_live_dict = train_set.indices_source_live
     str_live = []
@@ -76,7 +76,7 @@ def prepare_training_data(config):
     #print("HERE!!")
     #print(str_live)
     #print("THERE!!")
-    logger.info(str_live)
+    logger.info("Live data: "+str_live)
 
     indices_source_deepfake_dict = train_set.indices_source_deepfake
     str_deepfake = []
@@ -84,7 +84,7 @@ def prepare_training_data(config):
         str_deepfake.append(f"{k} {len(v)}")
     
     str_deepfake = '|'.join(str_deepfake)
-    logger.info(str_deepfake)
+    logger.info("Deepfake data: "+str_deepfake)
         
     if config['ddp']:
         sampler = DistributedSampler(train_set)
@@ -246,6 +246,13 @@ def main():
     # prepare the model (detector)
     model_class = DETECTOR[config['model_name']]
     model = model_class(config)
+
+    # LOAD EFFORT AIGI
+    logger.info("Loading Trained Effort-AIGI")
+    pretrained_model_path = "../pretrained/effort_clip_L14_trainOn_FaceForensic.pth"
+    state_dict = torch.load(pretrained_model_path)
+    state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+    model.load_state_dict(state_dict)
 
     # prepare the optimizer
     optimizer = choose_optimizer(model, config)

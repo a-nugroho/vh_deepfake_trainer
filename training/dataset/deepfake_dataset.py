@@ -138,7 +138,7 @@ class DeepFakeDataset(Dataset):
 
 class StratifiedSourceDataset(Dataset):
     def __init__(self, json_paths, json_folder=None, train=True, ssl=False, 
-                 transform=None, dataset_percentage=None):
+                 transform=None, dataset_percentage=None, dfd_json_paths = None):
         
         # Dummy data
         #self.data = torch.arange(100)  # pretend inputs
@@ -245,9 +245,10 @@ class StratifiedSourceDataset(Dataset):
             self.transform = transform
 
         # For Curriculum Learning
-        dfd_json_path = "/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/tools/dataset_assessor/results_att_fd3-1-0/test_200k_merged_train/dfd_1-0-0.json"
-        self.live_dfty_scores, self.deepfake_dfty_scores = self.get_difficulty_scores(dfd_json_path)
-        self.validate_by_difficulty()
+        #dfd_json_path = "/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/tools/dataset_assessor/results_att_fd3-1-0/test_200k_merged_train/dfd_1-0-0.json"
+        if dfd_json_paths:
+            self.live_dfty_scores, self.deepfake_dfty_scores = self.get_difficulty_scores(dfd_json_paths)
+            self.validate_by_difficulty()
         
         self.data_dict = {
             'image': self.live_image_paths+self.deepfake_image_paths, 
@@ -311,8 +312,10 @@ class StratifiedSourceDataset(Dataset):
                 #self.live_sources[live_idx] 
                 #self.deepfake_sources[deepfake_idx]
                 return (self.transform(live_image), self.transform(deepfake_image), 
-                        live_label, deepfake_label,
-                        self.live_dfty_scores[live_idx], self.deepfake_dfty_scores[deepfake_idx])
+                        live_label, deepfake_label)
+                #return (self.transform(live_image), self.transform(deepfake_image), 
+                #        live_label, deepfake_label,
+                #        self.live_dfty_scores[live_idx], self.deepfake_dfty_scores[deepfake_idx])
             
                 #self.live_sources[live_idx], self.deepfake_sources[deepfake_idx] 
                 
@@ -346,10 +349,21 @@ class StratifiedSourceDataset(Dataset):
             self.deepfake_labels.append(info["label"])
             self.deepfake_sources.append(json_path)
 
-    def get_difficulty_scores(self,dfd_json_path):
-        path_json = dfd_json_path
-        with open(path_json, 'r') as file:
-            data_json = json.load(file)
+    def get_difficulty_scores(self,dfd_json_paths):
+        result = {}
+        L_dict = []
+        for path_json in dfd_json_paths:
+            with open(path_json,'r') as file:
+                data_json = json.load(file)
+                L_dict.append(data_json)
+
+        for d in L_dict:
+            result.update(d)
+        
+        data_json = result
+        #path_jsons = dfd_json_paths
+        #with open(path_json, 'r') as file:
+        #    data_json = json.load(file)
 
         data_json_new = {v["processed_path"]:v for k,v in data_json.items()}
         live_dfty_scores = [data_json_new[i]['dfd_1-0-0'] if 'dfd_1-0-0' in data_json_new[i] 
@@ -435,10 +449,16 @@ class ProportionalStratifiedBatchSampler(Sampler):
             print(self.batch_sizes_source_live)
             print(self.batch_sizes_source_deepfake)
 
+        if hasattr(dataset,"live_dfty_scores"):
+            self.live_dfty_scores = dataset.live_dfty_scores
+        else:
+            self.live_dfty_scores = None
 
-        self.live_dfty_scores = dataset.live_dfty_scores
-        self.deepfake_dfty_scores = dataset.deepfake_dfty_scores
-    
+        if hasattr(dataset,"deepfake_dfty_scores"):
+            self.deepfake_dfty_scores = dataset.deepfake_dfty_scores
+        else:
+            self.deepfake_dfty_scores = None
+
     def set_active_bins(self, bin_ids):
         self.active_bins = bin_ids
 
@@ -465,54 +485,60 @@ class ProportionalStratifiedBatchSampler(Sampler):
         return grouped
 
     def __iter__(self):
-        bin_edges_live = self.make_bins(self.live_dfty_scores, n_bins=3)
+        if self.live_dfty_scores:
+            bin_edges_live = self.make_bins(self.live_dfty_scores, n_bins=3)
 
-        live_grouped = self.group_by_source_and_difficulty(
-            self.indices_source_live,
-            self.live_dfty_scores,
-            bin_edges_live
-        )
-
-        #pools_source_live = {
-        #    src: self.rng.permutation(indices).tolist()
-        #    for src, indices in self.indices_source_live.items()
-        #}
-        pools_source_live = {
-            src: {
-                bin_id: self.rng.permutation(bin_indices).tolist()
-                for bin_id, bin_indices in bins.items() if bin_id in self.active_bins
+            live_grouped = self.group_by_source_and_difficulty(
+                self.indices_source_live,
+                self.live_dfty_scores,
+                bin_edges_live
+            )
+            pools_source_live = {
+                src: {
+                    bin_id: self.rng.permutation(bin_indices).tolist()
+                    for bin_id, bin_indices in bins.items() if bin_id in self.active_bins
+                }
+                for src, bins in live_grouped.items()
             }
-            for src, bins in live_grouped.items()
-        }
-        pools_source_live = {
-            src: [idx for bin_list in bins.values() for idx in bin_list]
-            for src, bins in pools_source_live.items()
-        }
-
-        bin_edges_deepfake = self.make_bins(self.deepfake_dfty_scores, n_bins=3)
-
-        deepfake_grouped = self.group_by_source_and_difficulty(
-            self.indices_source_deepfake,
-            self.deepfake_dfty_scores,
-            bin_edges_deepfake
-        )
-
-        #pools_source_deepfake = {
-        #    src: self.rng.permutation(indices).tolist()
-        #    for src, indices in self.indices_source_deepfake.items()
-        #}
-
-        pools_source_deepfake = {
-            src: {
-                bin_id: self.rng.permutation(bin_indices).tolist()
-                for bin_id, bin_indices in bins.items() if bin_id in self.active_bins
+            
+            pools_source_live = {
+                src: [idx for bin_list in bins.values() for idx in bin_list]
+                for src, bins in pools_source_live.items()
             }
-            for src, bins in deepfake_grouped.items()
-        }
-        pools_source_deepfake = {
-            src: [idx for bin_list in bins.values() for idx in bin_list]
-            for src, bins in pools_source_deepfake.items()
-        }
+        else:
+            pools_source_live = {
+                src: self.rng.permutation(indices).tolist()
+                for src, indices in self.indices_source_live.items()
+            }
+
+        if self.deepfake_dfty_scores: 
+        
+            bin_edges_deepfake = self.make_bins(self.deepfake_dfty_scores, n_bins=3)
+
+            deepfake_grouped = self.group_by_source_and_difficulty(
+                self.indices_source_deepfake,
+                self.deepfake_dfty_scores,
+                bin_edges_deepfake
+            )
+
+            pools_source_deepfake = {
+                src: {
+                    bin_id: self.rng.permutation(bin_indices).tolist()
+                    for bin_id, bin_indices in bins.items() if bin_id in self.active_bins
+                    }
+                for src, bins in deepfake_grouped.items()
+            }
+
+            pools_source_deepfake = {
+                src: [idx for bin_list in bins.values() for idx in bin_list]
+                for src, bins in pools_source_deepfake.items()
+            }
+        
+        else:
+            pools_source_deepfake = {
+                src: self.rng.permutation(indices).tolist()
+                for src, indices in self.indices_source_deepfake.items()
+            }
 
         finished = False
         total_batch = len(self)
@@ -529,7 +555,7 @@ class ProportionalStratifiedBatchSampler(Sampler):
                         finished = True
                         break
                     else:
-                        pool += self.rng.permutation(self.indices_source_live[src]).tolist()
+                        pool += self.rng.permutation(self.indices_source_live[src]).tolist() # Sample 1 from sources
 
                 batch_live.extend(pool[:needed])
                 pools_source_live[src] = pool[needed:]

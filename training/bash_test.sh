@@ -1,0 +1,2 @@
+CUDA_VISIBLE_DEVICES=1 python test_simple.py \
+--detector_path config/detector/effort_vh.yaml --weights_path /mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/training/logs/training/effort_2025-12-18-07-29-00/train/training_indonesian_deepfake_dataset_v2_updated,df40_train_fs_official,facebook_dfdc_train_reduced_rev,test_200k_24nov_merged_train/ckpt_latest.pth
