@@ -1,0 +1,5 @@
+__version__ = "1.0.0"
+__codename__ = "connect_xlarge_384_in22ft1k"
+__author__ = "Williem"
+__author_email__ = "williem@verihubs.com"
+__homepage__ = "https://gitlab.internal.verihubs.com/verihubs-vision/face-anomaly/deepfake/face-deepfake"

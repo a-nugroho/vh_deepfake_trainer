@@ -22,12 +22,14 @@ train_dataset : [
     training_indonesian_deepfake_dataset_v2_updated,
     df40_train_fs_official,
     #df40_train_fsonly_rev,
-    facebook_dfdc_train_reduced_rev,
-    test_200k_24nov_merged_train,
-    reswapper_v2_train
+    facebook_dfdc_train_rev,
+    #test_200k_24nov_merged_train,
+    test_200k_24nov_swapped_train,
+    reswapper_v2_train,
     #test_200k_merged_train
     #test_200k_train,
     #test_200k_swapped_train,
+    200k_live_face_dataset
     #200k_live_face_dataset_55plus,
     #result_blendface-strictpose,
     #result_inswapper-strictpose,
@@ -49,11 +51,14 @@ test_dataset : [
     #result_e4s_20251103-strictpose
 ]
 dataset_percentage : {
-    training_indonesian_deepfake_dataset_v2_updated: 0.2,
-    test_200k_24nov_merged_train: 0.3,
-    200k_live_face_dataset: 1.0,
-    result_e4s_20251103: 1.0
+    training_indonesian_deepfake_dataset_v2_updated: 0.4,
+    test_200k_24nov_swapped_train: 0.6,
+    #test_200k_24nov_merged_train: 0.6,
+    200k_live_face_dataset: 0.6,
+    result_e4s_20251103: 1.0,
+    facebook_dfdc_train_rev: 0.6
 }
+adjust_lr_iteration: 25000
 # label settings
 label_dict:
   # DFD

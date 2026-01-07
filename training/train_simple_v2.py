@@ -63,7 +63,7 @@ def init_seed(config):
 
 def prepare_training_data(config):
     # Only use the blending dataset class in training
-    
+    """
     train_set = StratifiedSourceDataset(
         config['train_dataset'],json_folder=config['dataset_json_folder'], train=True,
         dataset_percentage=config['dataset_percentage'], dfd_json_paths = config['dfd_json_path']
@@ -109,14 +109,25 @@ def prepare_training_data(config):
     train_set = DeepFakeDataset(
         config['train_dataset'],json_folder=config['dataset_json_folder'],
         dataset_percentage=config['dataset_percentage'], train=True)
+
+    print(set(train_set.data_dict['label']))
+    sampler = MinoritySampler(
+        labels = train_set.data_dict['label'],
+        batch_size = config['train_batchSize'],
+        minority_classes={0},
+        drop_last=True,
+    )
+
+    
     train_data_loader = \
             torch.utils.data.DataLoader(
                 dataset=train_set,
-                batch_size=config['train_batchSize'],
-                shuffle=True,
-                num_workers=int(config['workers'])
+                #batch_size=config['train_batchSize'],
+                #shuffle=True,
+                num_workers=int(config['workers']),
+                batch_sampler=sampler
             )
-    """
+    
 
     return train_data_loader
 
@@ -262,13 +273,12 @@ def main():
     model = model_class(config)
 
     # LOAD EFFORT AIGI
-    """
     logger.info("Loading Trained Effort-AIGI")
     pretrained_model_path = "../pretrained/effort_clip_L14_trainOn_FaceForensic.pth"
     state_dict = torch.load(pretrained_model_path)
     state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
     model.load_state_dict(state_dict)
-    """
+    
     # prepare the optimizer
     optimizer = choose_optimizer(model, config)
 

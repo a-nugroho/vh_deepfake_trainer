@@ -273,7 +273,13 @@ class Trainer(object):
             # store data by recorder
             ## store metric
             for name, value in batch_metrics.items():
+                if value is None:
+                    if name in ('eer'):
+                        value=1.0
+                    else:
+                        value=0.0
                 train_recorder_metric[name].update(universal_round(value,5))
+            
             ## store loss
             for name, value in losses.items():
                 train_recorder_loss[name].update(universal_round(value,5))
@@ -346,9 +352,11 @@ class Trainer(object):
     def train_epoch_verihubs(self,
         epoch,
         train_data_loader,
-        test_data_loaders=None):
+        test_data_loaders=None,
+        scheduler=None,
+        config=None):
         
-        train_data_loader.batch_sampler.set_active_bins([0,1,2])
+        #train_data_loader.batch_sampler.set_active_bins([0,1,2])
         self.logger.info("===> Epoch[{0}] start!, Iteration length: {1}".format(epoch,len(train_data_loader)))
         if epoch>=1:
             times_per_epoch = 2
@@ -371,15 +379,21 @@ class Trainer(object):
         last_idx = len(train_data_loader) - 1
         
         
-        for batch_idx, (input_live, input_fake, target_live, target_fake, *additional_input) in enumerate(tqdm(train_data_loader)):
+        #for batch_idx, (input_live, input_fake, target_live, target_fake, *additional_input) in enumerate(tqdm(train_data_loader)):
+        for batch_idx, datas in enumerate(tqdm(train_data_loader)):
             iteration = batch_idx + epoch*last_idx
             last_batch = batch_idx == last_idx
-            input_live, target_live = input_live.cuda(), target_live.cuda()
-            input_fake, target_fake = input_fake.cuda(), target_fake.cuda()
-            
-            input = torch.cat((input_live,input_fake))
-            target = torch.cat((target_live,target_fake))
-            additional_input = [i.cuda() for i in additional_input]
+            if len(datas)>2:
+                (input_live, input_fake, target_live, target_fake, *additional_input) = datas
+                input_live, target_live = input_live.cuda(), target_live.cuda()
+                input_fake, target_fake = input_fake.cuda(), target_fake.cuda()
+                input = torch.cat((input_live,input_fake))
+                target = torch.cat((target_live,target_fake))
+                additional_input = [i.cuda() for i in additional_input]
+            else:
+                input, target = datas
+                input = input.cuda()
+                target = target.cuda()
 
             # 2. Shuffle using a random permutation
             perm = torch.randperm(input.size(0))     # shuffled indices
@@ -406,6 +420,11 @@ class Trainer(object):
             # store data by recorder
             ## store metric
             for name, value in batch_metrics.items():
+                if value is None:
+                    if name in ('eer'):
+                        value=1.0
+                    else:
+                        value=0.0
                 train_recorder_metric[name].update(universal_round(value,5))
             ## store loss
             for name, value in losses.items():
@@ -507,7 +526,10 @@ class Trainer(object):
 
         # run test at the end
             last_iteration = iteration
-        
+            if scheduler is not None:
+                if config['adjust_lr_iteration']:
+                    scheduler.step()
+            
         iteration = last_iteration
         if test_data_loaders is not None and (not self.config['ddp'] ):
             self.logger.info("===> Test start!")
@@ -528,7 +550,7 @@ class Trainer(object):
         else:
             test_best_metric = None
 
-        return test_best_metric
+        return test_best_metric, scheduler
 
     def get_respect_acc(self,prob,label):
         pred = np.where(prob > 0.5, 1, 0)

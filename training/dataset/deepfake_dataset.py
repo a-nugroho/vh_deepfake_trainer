@@ -15,8 +15,10 @@ import dataset.utils.aug.border as border
 
 from collections import defaultdict
 
+import albumentations as A
 
-class DeepFakeDataset(Dataset):
+
+class DeepFakeStandardDataset(Dataset):
     def __init__(self, json_paths,json_folder=None, train=True, ssl=False, transform=None):
         self.data = []
         if isinstance(json_paths, str):
@@ -136,6 +138,240 @@ class DeepFakeDataset(Dataset):
             return self.transform(img), label
 
 
+
+class DeepFakeDataset(Dataset):
+    def __init__(self, json_paths,json_folder=None, train=True, ssl=False, transform=None, dataset_percentage=None):
+        self.data = []
+        self.live_image_paths = []
+        self.live_labels = []
+        self.live_sources = []
+        self.deepfake_image_paths = []
+        self.deepfake_labels = []
+        self.deepfake_sources = []
+        self.dataset_percentage = dataset_percentage
+        self.train = train
+        if isinstance(json_paths, str):
+            json_path = json_paths
+            if json_folder:
+                json_path = os.path.join(json_folder,json_path+'.json')
+
+            with open(json_path, 'r') as f:
+                self.data.extend(json.load(f).items())
+
+        else:
+            for json_path in json_paths:
+                if json_folder:
+                    json_path = os.path.join(json_folder,json_path+'.json')
+        
+                with open(json_path, 'r') as f:
+                    if self.train:
+                        metadata = json.load(f)
+                        metadata_keys = list(metadata.keys())
+                        json_name = json_path.split("/")[-1].split(".")[0]
+                        pctg_now = 1.0
+                        if dataset_percentage is not None:
+                            if json_name in dataset_percentage:
+                                metadata_keys = metadata_keys[:int(dataset_percentage[json_name]*len(metadata_keys))]
+                                pctg_now = dataset_percentage[json_name]
+                            
+                        metadata = {d: metadata[d] for d in metadata_keys}
+                        #for img_path, info in metadata.items():
+                        #    self.process_data(info, img_path, json_path)
+                        self.data.extend(metadata.items())
+                        print(f"Dataset name: {json_name}, percentage: {pctg_now}, # of data:{len(metadata.keys())}")
+                    else:
+                        self.data.extend(json.load(f).items())
+
+        self.train = train
+        self.ssl = ssl
+
+        if transform is None:
+            if not train:
+                self.transform = T.Compose([
+                    T.Resize(224),
+                    T.CenterCrop(224),
+                    #T.Resize(384),
+                    #T.ToTensor(),
+                    # Because prefetcher
+                    #T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                ])
+
+                #to_tensor = [T.ToTensor(),
+                #T.Normalize(mean=[0.48145466, 0.4578275, 0.40821073],
+                #std=[0.26862954,0.26130258,0.27577711])]
+
+                to_tensor = [T.ToTensor(),
+                T.Normalize(mean=[0.5, 0.5, 0.5],
+                std=[0.5, 0.5, 0.5])]
+                
+                
+                self.transform = T.Compose(self.transform.transforms + to_tensor)
+
+            else:
+                # self.transform = T.Compose([
+                #     T.RandomHorizontalFlip(),
+                #     T.ToTensor(),
+                #     T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                # ])
+                self.transform = T.Compose([
+                    T.RandomHorizontalFlip(p=0.5),
+                    T.RandomRotation(degrees=15),
+                    #T.RandomApply([T.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+                    #T.RandomGrayscale(p=0.2),
+                    #T.RandomApply([low_quality.SimCLRGaussianBlur(sigma=[.1, 2.])], p=0.5),     
+                    low_quality.RandomDownUpSampler(p=0.25,downsampling_range=(0.33,0.8)),
+                    low_quality.SimulateLowQuality(p=0.5),
+                    
+                    #crop.RandomZoomCrop(perc_range=(0.75, 1.0)),
+                    #border.RandomBorder(border_amount=(0.001, 0.15), p=0.5),
+                    #T.Resize(224),
+                    #T.CenterCrop((224,224)),
+                    
+                    T.RandomResizedCrop(size=(224, 224), scale=(0.66, 1.0)),
+                    border.RandomBlackBorderFixedSizeSquare(max_border_ratio=0.3, p=0.5),
+                    #T.Resize(224),
+                    
+                    #T.RandomVerticalFlip(p=0.5),
+                    #T.Resize(384),
+                    #T.CenterCrop((384,384)),
+                    # because prefetcher
+                    #T.ToTensor(),
+                    #T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) #Disable this if using prefetcher
+                ])
+
+                #to_tensor = [T.ToTensor(),
+                #T.Normalize(mean=[0.48145466, 0.4578275, 0.40821073],
+                #std=[0.26862954,0.26130258,0.27577711])]
+
+                to_tensor = [T.ToTensor(),
+                T.Normalize(mean=[0.5, 0.5, 0.5],
+                std=[0.5, 0.5, 0.5])]
+
+                self.transform = T.Compose(self.transform.transforms + to_tensor)
+
+        else:
+            self.transform = transform
+        
+        self.live_len = len(self.live_image_paths)
+        self.deepfake_len = len(self.deepfake_image_paths)
+        #self.label_list = []
+        self.data_dict = {
+            'image': [i[1]['processed_path'] for i in self.data],
+            'label': [i[1]['label'] for i in self.data], 
+        }
+
+    def process_data(self, info, img_path, json_path):
+        """
+        Processes training data and appends paths and labels for both live and deepfake images.
+
+        Args:
+            info (dict): Metadata of the image.
+            img_path (str): Path to the image in the JSON metadata.
+        """
+        if info["label"] == 0:
+            self.live_image_paths.append(
+                os.path.join("data", info["processed_path"])
+            )
+            self.live_labels.append(info["label"])
+            self.live_sources.append(json_path)
+
+        else:
+            self.deepfake_image_paths.append(
+                os.path.join("data", info["processed_path"])
+            )
+            
+            self.deepfake_labels.append(info["label"])
+            self.deepfake_sources.append(json_path)
+
+    def __len__(self):
+        if self.train:
+            return max(self.live_len, self.deepfake_len)
+        else:
+            return len(self.data)
+    
+    def load_image(self, image_path):
+        try:
+            image = Image.open(image_path).convert("RGB")
+            return image
+        except Exception as e:
+            print(f"Error loading image at path {image_path}: {e}")
+            return None
+    
+    def __getitem__(self, idx):
+        """
+        if self.train:
+            idx_live = idx % self.live_len
+            idx_deepfake = idx % self.deepfake_len
+            # Get live image and its label
+            live_idx = idx_live % self.live_len
+            live_image = self.load_image(
+                self.live_image_paths[live_idx]
+            )
+            live_label = self.live_labels[live_idx]
+
+            # Get deepfake image and its label
+            deepfake_idx = idx_deepfake % self.deepfake_len
+            deepfake_image = self.load_image(
+                self.deepfake_image_paths[deepfake_idx]
+            )
+            deepfake_label = self.deepfake_labels[deepfake_idx]
+            return (self.transform(live_image), self.transform(deepfake_image), 
+                            live_label, deepfake_label)
+        else:
+        """
+        img_path, metadata = self.data[idx]
+    
+        label = metadata['label']  # 0 = real, 1 = deepfake
+        img_path = metadata['processed_path']
+
+        img = cv2.imread(img_path)
+        if img is None:
+            raise FileNotFoundError(f"Image not found at {img_path}")
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(img)
+        return self.transform(img), label
+    
+    """
+    def __getitem__(self, idx):
+        img_path, metadata = self.data[idx]
+        
+        label = metadata['label']  # 0 = real, 1 = deepfake
+        img_path = metadata['processed_path']
+        #if 'DF40/eval/' in img_path:
+        #    img_path = os.path.join("/mnt/ssd2/dataset/"+img_path)
+
+
+        # Step 1 & 2: Load image with OpenCV and convert to RGB
+        img = cv2.imread(img_path)
+        if img is None:
+            raise FileNotFoundError(f"Image not found at {img_path}")
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        
+        ## Step 3: Resize using cv2.resize
+        ##img = cv2.resize(img, (448, 448))  # Resize to 224x224
+
+        ## Step 4: Optional manipulations (e.g., for training)
+        ##if self.train:
+        #    # Convert to HSV for saturation adjustment
+        ##    img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+        ##    if np.random.randint(2):  # Randomly adjust saturation
+        ##        img[..., 1] = np.clip(img[..., 1] * np.random.uniform(0.8, 1.2), 0, 255)
+        ##    img = cv2.cvtColor(img, cv2.COLOR_HSV2RGB)
+        
+        # Step 5: Convert to PIL Image
+        img = Image.fromarray(img)
+        # img = Image.fromarray(img).resize((224, 224))
+
+        # Step 6: Apply transforms and return
+        if self.train:
+            return self.transform(img), label
+        else:
+            #return self.transform(img), label, img_path
+            return self.transform(img), label
+    """
+
+
 class StratifiedSourceDataset(Dataset):
     def __init__(self, json_paths, json_folder=None, train=True, ssl=False, 
                  transform=None, dataset_percentage=None, dfd_json_paths = None):
@@ -204,7 +440,7 @@ class StratifiedSourceDataset(Dataset):
                     T.RandomRotation(degrees=15),
                     #T.RandomApply([T.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
                     #T.RandomGrayscale(p=0.2),
-                    T.RandomApply([low_quality.SimCLRGaussianBlur(sigma=[.1, 2.])], p=0.5),     
+                    #T.RandomApply([low_quality.SimCLRGaussianBlur(sigma=[.1, 2.])], p=0.5),     
                     low_quality.RandomDownUpSampler(p=0.25,downsampling_range=(0.33,0.8)),
                     low_quality.SimulateLowQuality(p=0.5),
                     
@@ -225,11 +461,13 @@ class StratifiedSourceDataset(Dataset):
                     #T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) #Disable this if using prefetcher
                 ])
 
-                to_tensor = [T.ToTensor(),
-                T.Normalize(mean=[0.48145466, 0.4578275, 0.40821073],
-                std=[0.26862954,0.26130258,0.27577711])]
+                self.transform = self.init_data_aug_method()
+                
+                #to_tensor = [T.ToTensor(),
+                #T.Normalize(mean=[0.48145466, 0.4578275, 0.40821073],
+                #std=[0.26862954,0.26130258,0.27577711])]
 
-                self.transform = T.Compose(self.transform.transforms + to_tensor)
+                #self.transform = T.Compose(self.transform.transforms + to_tensor)
 
                 if ssl:
                     self.ssl_transforms = T.Compose([
@@ -281,7 +519,17 @@ class StratifiedSourceDataset(Dataset):
         except Exception as e:
             print(f"Error loading image at path {image_path}: {e}")
             return None
-        
+
+    def norm_to_tensor(self, img):
+        """
+        Convert an image to a PyTorch tensor.
+        """
+        img = T.ToTensor()(img)
+        mean = [0.48145466, 0.4578275, 0.40821073]
+        std = [0.26862954,0.26130258,0.27577711]
+        normalize = T.Normalize(mean=mean, std=std)
+        return normalize(img)
+       
     def __getitem__(self, tuple_idxs):
         #print(tuple_idxs)
         live_images = []
@@ -298,20 +546,34 @@ class StratifiedSourceDataset(Dataset):
                     self.live_image_paths[live_idx]
                 )
                 live_label = self.live_labels[live_idx]
-
+                if self.train:
+                    # Create a dictionary of arguments
+                    kwargs = {'image': np.array(live_image)}
+                    live_image_transformed = self.norm_to_tensor(self.transform(**kwargs)['image'])
+                else:
+                    live_image_transformed = self.transform(live_image)
+                # with albumentation
+                
                 # Get deepfake image and its label
                 deepfake_idx = idx_deepfake % self.deepfake_len
                 deepfake_image = self.load_image(
                     self.deepfake_image_paths[deepfake_idx]
                 )
                 deepfake_label = self.deepfake_labels[deepfake_idx]
+
+                # with albumentation
+                if self.train:
+                    kwargs = {'image': np.array(deepfake_image)}
+                    deepfake_image_transformed = self.norm_to_tensor(self.transform(**kwargs)['image'])
+                else:
+                    deepfake_image_transformed = self.transform(deepfake_image)
                 #live_images.append(self.transform(live_image))
                 #deepfake_images.append(self.transform(deepfake_image))
                 #live_labels.append(live_label)
                 #deepfake_labels.append(deepfake_label)
                 #self.live_sources[live_idx] 
                 #self.deepfake_sources[deepfake_idx]
-                return (self.transform(live_image), self.transform(deepfake_image), 
+                return (live_image_transformed, deepfake_image_transformed, 
                         live_label, deepfake_label)
                 #return (self.transform(live_image), self.transform(deepfake_image), 
                 #        live_label, deepfake_label,
@@ -393,6 +655,26 @@ class StratifiedSourceDataset(Dataset):
         idx_medium = random.sample(range(len(ds_medium)), int(len(ds_medium) * mix_ratio))
         mixed_idx = idx_easy + idx_medium
         return torch.utils.data.Subset(ds_easy.dataset, mixed_idx)
+    
+    def init_data_aug_method(self):
+        trans = A.Compose([
+           A.HorizontalFlip(p=0.5),
+           A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
+           A.HueSaturationValue(p=0.3),
+           A.ImageCompression(quality_lower=40, quality_upper=100, p=0.1),
+           A.GaussNoise(p=0.1),
+           A.MotionBlur(p=0.1),
+           A.CLAHE(p=0.1),
+           A.ChannelShuffle(p=0.1),
+           A.Cutout(p=0.1),
+           A.RandomGamma(p=0.3),
+           A.GlassBlur(p=0.3),
+           A.RandomResizedCrop(width=224,height=224)
+
+        ],
+           # keypoint_params=A.KeypointParams(format='xy') if self.config['with_landmark'] else None
+        )
+        return trans
     
 class ProportionalStratifiedBatchSampler(Sampler):
     def __init__(self, dataset, batch_size, drop_last=False, seed=42, print_info=True):
@@ -596,6 +878,410 @@ class ProportionalStratifiedBatchSampler(Sampler):
             for src in self.sources_deepfake
         )
         return max(ab,cd) 
+
+class SoftMinorityBatchSampler(Sampler):
+    def __init__(
+        self,
+        labels,
+        batch_size,
+        minority_classes,
+        p_fix=0.5,
+        drop_last=False,
+        generator=None,
+    ):
+        """
+        labels: list or 1D tensor
+        batch_size: int
+        minority_classes: set or list
+        p_fix: probability of fixing a batch if no minority is present
+        drop_last: bool
+        generator: torch.Generator or None
+        """
+        self.labels = list(labels)
+        self.batch_size = batch_size
+        self.minority_classes = set(minority_classes)
+        self.p_fix = p_fix
+        self.drop_last = drop_last
+        self.generator = generator
+
+        self.minority_indices = [
+            i for i, y in enumerate(self.labels) if y in self.minority_classes
+        ]
+        self.majority_indices = [
+            i for i, y in enumerate(self.labels) if y not in self.minority_classes
+        ]
+
+        if len(self.minority_indices) == 0:
+            raise ValueError("No minority samples found.")
+
+    def __iter__(self):
+        rng = random.Random()
+        if self.generator is not None:
+            rng.seed(self.generator.initial_seed())
+
+        minority_pool = self.minority_indices.copy()
+        majority_pool = self.majority_indices.copy()
+
+        rng.shuffle(minority_pool)
+        rng.shuffle(majority_pool)
+
+        all_pool = minority_pool + majority_pool
+        rng.shuffle(all_pool)
+
+        batches = []
+        ptr = 0
+
+        while ptr + self.batch_size <= len(all_pool):
+            batch = all_pool[ptr : ptr + self.batch_size]
+            ptr += self.batch_size
+
+            # check minority presence
+            has_minority = any(
+                self.labels[idx] in self.minority_classes for idx in batch
+            )
+
+            # soft fix
+            if (not has_minority) and minority_pool and rng.random() < self.p_fix:
+                # replace one majority sample
+                maj_positions = [
+                    i for i, idx in enumerate(batch)
+                    if self.labels[idx] not in self.minority_classes
+                ]
+                if maj_positions:
+                    replace_pos = rng.choice(maj_positions)
+                    replacement = minority_pool.pop()
+                    batch[replace_pos] = replacement
+
+            batches.append(batch)
+
+        if not self.drop_last and ptr < len(all_pool):
+            batches.append(all_pool[ptr:])
+
+        return iter(batches)
+
+    def __len__(self):
+        total = len(self.labels)
+        if self.drop_last:
+            return total // self.batch_size
+        return (total + self.batch_size - 1) // self.batch_size
+
+class MinorityAwareBatchSampler(Sampler):
+    def __init__(
+        self,
+        labels,
+        batch_size,
+        minority_classes,
+        drop_last=False,
+        generator=None,
+    ):
+        """
+        labels: list or 1D tensor of dataset labels
+        batch_size: int
+        minority_classes: set or list of minority class labels
+        drop_last: bool
+        generator: torch.Generator or None
+        """
+        self.labels = list(labels)
+        self.batch_size = batch_size
+        self.minority_classes = set(minority_classes)
+        self.drop_last = drop_last
+        self.generator = generator
+
+        # Split indices
+        self.minority_indices = [
+            i for i, y in enumerate(self.labels) if y in self.minority_classes
+        ]
+        self.majority_indices = [
+            i for i, y in enumerate(self.labels) if y not in self.minority_classes
+        ]
+
+        if len(self.minority_indices) == 0:
+            raise ValueError("No minority samples found.")
+
+    def __iter__(self):
+        rng = random.Random()
+        if self.generator is not None:
+            rng.seed(self.generator.initial_seed())
+
+        minority_pool = self.minority_indices.copy()
+        majority_pool = self.majority_indices.copy()
+
+        rng.shuffle(minority_pool)
+        rng.shuffle(majority_pool)
+
+        batches = []
+
+        while minority_pool and (len(minority_pool) + len(majority_pool)) >= self.batch_size:
+            batch = []
+
+            # 1️⃣ force exactly ONE minority sample
+            batch.append(minority_pool.pop())
+
+            # 2️⃣ fill remaining slots naturally
+            remaining = self.batch_size - 1
+            combined_pool = minority_pool + majority_pool
+            rng.shuffle(combined_pool)
+
+            selected = combined_pool[:remaining]
+            batch.extend(selected)
+
+            # 3️⃣ remove selected indices from pools
+            for idx in selected:
+                if idx in minority_pool:
+                    minority_pool.remove(idx)
+                else:
+                    majority_pool.remove(idx)
+
+            batches.append(batch)
+
+        if not self.drop_last and (minority_pool or majority_pool):
+            leftover = minority_pool + majority_pool
+            if len(leftover) > 0:
+                batches.append(leftover)
+
+        return iter(batches)
+
+    def __len__(self):
+        total = len(self.labels)
+        if self.drop_last:
+            return total // self.batch_size
+        return (total + self.batch_size - 1) // self.batch_size
+      
+class StandardSampler(Sampler):
+    def __init__(self, dataset, batch_size, drop_last=False, seed=42, print_info=True):
+        #assert hasattr(dataset, 'source_to_indices'), "Dataset must have 'source_to_indices'"
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.drop_last = drop_last
+        self.rng = np.random.default_rng(seed)
+
+        self.indices_source_live = dataset.indices_source_live
+        self.indices_source_deepfake = dataset.indices_source_deepfake
+        
+        str_live = []
+        for k,v in self.indices_source_live.items():
+            str_live.append(f"{k} {len(v)}")
+
+        str_live = '|'.join(str_live)
+        
+        str_deepfake = []
+        for k,v in self.indices_source_deepfake.items():
+            str_deepfake.append(f"{k} {len(v)}")
+        
+        str_deepfake = '|'.join(str_deepfake)
+        if print_info:
+            print(str_live)
+            print(str_deepfake)
+            
+        self.sources_live = list(self.indices_source_live.keys())
+        self.sources_deepfake = list(self.indices_source_deepfake.keys())
+        total_samples = len(dataset)
+
+    def set_active_bins(self, bin_ids):
+        self.active_bins = bin_ids
+
+    def make_bins(self,scores, n_bins=3):
+        return np.quantile(scores, np.linspace(0, 1, n_bins + 1))
+    
+    def group_by_source_and_difficulty(self,indices_by_source, dfty_scores, bin_edges):
+        grouped = {}
+
+        for src, indices in indices_by_source.items():
+            src_groups = {i: [] for i in range(len(bin_edges) - 1)}
+
+            for idx in indices:
+                score = dfty_scores[idx]
+
+                # find which bin this score belongs to
+                bin_id = np.digitize(score, bin_edges) - 1
+                bin_id = max(0, min(bin_id, len(bin_edges) - 2))  # clamp
+
+                src_groups[bin_id].append(idx)
+
+            grouped[src] = src_groups
+
+        return grouped
+
+    def __iter__(self):
+        if self.live_dfty_scores:
+            bin_edges_live = self.make_bins(self.live_dfty_scores, n_bins=3)
+
+            live_grouped = self.group_by_source_and_difficulty(
+                self.indices_source_live,
+                self.live_dfty_scores,
+                bin_edges_live
+            )
+            pools_source_live = {
+                src: {
+                    bin_id: self.rng.permutation(bin_indices).tolist()
+                    for bin_id, bin_indices in bins.items() if bin_id in self.active_bins
+                }
+                for src, bins in live_grouped.items()
+            }
+            
+            pools_source_live = {
+                src: [idx for bin_list in bins.values() for idx in bin_list]
+                for src, bins in pools_source_live.items()
+            }
+        else:
+            pools_source_live = {
+                src: self.rng.permutation(indices).tolist()
+                for src, indices in self.indices_source_live.items()
+            }
+
+        if self.deepfake_dfty_scores: 
+        
+            bin_edges_deepfake = self.make_bins(self.deepfake_dfty_scores, n_bins=3)
+
+            deepfake_grouped = self.group_by_source_and_difficulty(
+                self.indices_source_deepfake,
+                self.deepfake_dfty_scores,
+                bin_edges_deepfake
+            )
+
+            pools_source_deepfake = {
+                src: {
+                    bin_id: self.rng.permutation(bin_indices).tolist()
+                    for bin_id, bin_indices in bins.items() if bin_id in self.active_bins
+                    }
+                for src, bins in deepfake_grouped.items()
+            }
+
+            pools_source_deepfake = {
+                src: [idx for bin_list in bins.values() for idx in bin_list]
+                for src, bins in pools_source_deepfake.items()
+            }
+        
+        else:
+            pools_source_deepfake = {
+                src: self.rng.permutation(indices).tolist()
+                for src, indices in self.indices_source_deepfake.items()
+            }
+
+        finished = False
+        total_batch = len(self)
+        iter_batch = 0
+        
+        while iter_batch < total_batch:
+            batch_live = []
+            for src in self.sources_live:
+                pool = pools_source_live[src]
+                needed = self.batch_sizes_source_live[src]
+
+                if len(pool) < needed:
+                    if self.drop_last:
+                        finished = True
+                        break
+                    else:
+                        pool += self.rng.permutation(self.indices_source_live[src]).tolist() # Sample 1 from sources
+
+                batch_live.extend(pool[:needed])
+                pools_source_live[src] = pool[needed:]
+
+            batch_deepfake = []
+            for src in self.sources_deepfake:
+                pool = pools_source_deepfake[src]
+                needed = self.batch_sizes_source_deepfake[src]
+
+                if len(pool) < needed:
+                    if self.drop_last:
+                        finished = True
+                        break
+                    else:
+                        pool += self.rng.permutation(self.indices_source_deepfake[src]).tolist()
+
+                batch_deepfake.extend(pool[:needed])
+                pools_source_deepfake[src] = pool[needed:]
+
+            if finished or (self.drop_last and len(batch_live) < self.batch_size):
+                break
+            
+            #shuffle batch
+            self.rng.shuffle(batch_live)
+            self.rng.shuffle(batch_deepfake)
+
+            yield zip(batch_live,batch_deepfake)
+            iter_batch += 1
+
+    def __len__(self):
+        
+        ab = max(
+            len(self.indices_source_live[src]) // max(1, self.batch_sizes_source_live[src])
+            for src in self.sources_live
+        )
+        cd = max(
+            len(self.indices_source_deepfake[src]) // max(1, self.batch_sizes_source_deepfake[src])
+            for src in self.sources_deepfake
+        )
+        return max(ab,cd) 
+
+class MinoritySampler(Sampler):
+    def __init__(
+        self,
+        labels,
+        batch_size,
+        minority_classes,
+        drop_last = False,
+        generator = None
+    ):
+        self.labels = list(labels)
+        self.batch_size = batch_size
+        self.minority_classes = set(minority_classes)
+        self.drop_last = drop_last
+        self.generator = generator
+
+        self.minority_indices = [
+            i for i, y in enumerate(self.labels) if y in self.minority_classes
+        ]
+        self.majority_indices = [
+            i for i, y in enumerate(self.labels) if y not in self.minority_classes
+        ]
+
+        if len(self.minority_indices) == 0:
+            raise ValueError("No minority samples found.")
+        
+    def __iter__(self):
+        rng = random.Random()
+        if self.generator is not None:
+            rng.seed(self.generator.initial_seed())
+        
+        # Get live pool
+        minority_pool = self.minority_indices.copy()
+
+        # Get deepfake pool
+        majority_pool = self.majority_indices.copy()
+
+        rng.shuffle(minority_pool)
+        rng.shuffle(majority_pool)
+        # Get live/deepfake ratio
+        # Get number of live (minority) per- batch: round(ratio_live * batch_size)
+        ratio_live = len(minority_pool)/(len(minority_pool)+len(majority_pool))
+        # Get number of deepfake (majority) per batch: batch_size - num_live
+        live_batch = round(ratio_live*self.batch_size)
+        deepfake_batch = self.batch_size-live_batch
+
+        minority_chunks = split_by_bin_size(minority_pool,live_batch)
+        majority_chunks = split_by_bin_size(majority_pool,deepfake_batch)
+
+        batches = []
+        for i in range(min(len(minority_chunks),len(majority_chunks))):
+            batches.append(minority_chunks[i]+ majority_chunks[i])
+
+        return iter(batches)
+    
+    def __len__(self):
+        total = len(self.labels)
+        if self.drop_last:
+            return total // self.batch_size
+        return (total + self.batch_size - 1) // self.batch_size
+
+# Custom batch sampler
+
+
+# create slices of live and slices of deepfake
+# combine slices of live and deepfake
+def split_by_bin_size(lst, bin_size):
+    return [lst[i:i + bin_size] for i in range(0, len(lst), bin_size)]
 
 class CurriculumImageDataset(Dataset):
     def __init__(self, samples, transform=None):
