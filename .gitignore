@@ -218,7 +218,18 @@ __marimo__/
 # image files
 *.png
 *.json
+*.jpg
+*.jpeg
 
 # skipping checkpoints
 *.pth
 *.onnx
+
+tools/deepfake_generator/BFS-BestFaceSwap
+*.tfevents.*
+tools/dataset_assessor/logs/
+*/tools/saved_samples/
+*.pickle
+tools/evaluation_tools/tools/saved_samples/
+tools/dataset_assessor/model_test/result
+unused/

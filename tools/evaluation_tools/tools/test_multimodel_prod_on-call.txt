@@ -1,0 +1,4 @@
+image_name|pred_label|deepfake_score|score_clip_cip|score_clip_df40pre|score_clip_eff_vh_3|logits_clip_cip|logits_clip_df40pre|logits_clip_eff_vh_3
+/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/on-call/2026-01-20/IMG-20260112-WA0019.jpg|DEEPFAKE|0.9947|0.29181|0.99904|0.99994|1.44242,0.55583|-3.56578,3.37734|-4.46253,5.18569
+/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/on-call/2026-01-20/IMG-20260112-WA0020.jpg|DEEPFAKE|0.98047|0.10127|0.98987|0.99991|2.16991,-0.01333|-2.02985,2.55256|-3.6927,5.65559
+/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/on-call/2026-01-20/IMG-20260112-WA0021.jpg|DEEPFAKE|0.99464|0.46673|0.99837|0.99992|1.11379,0.98051|-3.26629,3.15412|-4.01255,5.37261

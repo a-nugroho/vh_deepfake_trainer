@@ -1,0 +1,7 @@
+image_name|pred_label|deepfake_score|score_clip_cip|score_clip_df40pre|score_clip_eff_vh_3|logits_clip_cip|logits_clip_df40pre|logits_clip_eff_vh_3
+/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/on-call/2026-01-21/Deepfake Failed(2).jpg|REAL|0.23874|0.89779|0.25037|0.01041|0.16563,2.33854|0.71153,-0.38513|3.23592,-1.31906
+/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/on-call/2026-01-21/Deepfake Failed(3).jpg|DEEPFAKE|0.97624|0.93906|0.87799|0.9984|-0.13793,2.59705|-0.80667,1.16683|-2.52998,3.90892
+/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/on-call/2026-01-21/Deepfake Failed(6).png|DEEPFAKE|0.72079|0.20982|0.97024|0.66522|2.06532,0.73933|-1.65999,1.82444|0.5082,1.19485
+/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/on-call/2026-01-21/Deepfake Failed(1).png|REAL|0.14237|0.30403|0.08091|0.10632|1.7442,0.91603|1.8303,-0.59978|2.54775,0.41881
+/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/on-call/2026-01-21/Deepfake Failed(5).png|DEEPFAKE|0.55521|0.47812|0.34207|0.80328|1.23012,1.14254|0.27848,-0.37558|0.18341,1.59033
+/mnt/ssd/workspace/adi/repos/vh_deepfake_trainer/on-call/2026-01-21/Deepfake Failed(4).png|DEEPFAKE|0.9626|0.99045|0.74994|0.98209|-1.05369,3.58773|0.15687,1.25514|-1.14929,2.85488

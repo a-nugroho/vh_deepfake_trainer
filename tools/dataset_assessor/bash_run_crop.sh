@@ -1,0 +1,4 @@
+python run_crop.py -d /mnt/ssd/workspace/adi/repos/VisoMaster/generated_swaps/pair-200k_live_face_dataset-24nov/simswap_enhanced/ -t /mnt/NAS/dataset/deepfake/vh_deepfake/simswap_enhanced/ -r vh_df_simswap_enh
+python run_crop.py -d /mnt/ssd/workspace/adi/repos/VisoMaster/generated_swaps/pair-200k_live_face_dataset-24nov/simswap/ -t /mnt/NAS/dataset/deepfake/vh_deepfake/simswap/ -r vh_df_simswap
+python run_crop.py -d /mnt/ssd/workspace/adi/repos/VisoMaster/generated_swaps/pair-200k_live_face_dataset-24nov/ghostface_enhanced/ -t /mnt/NAS/dataset/deepfake/vh_deepfake/ghostface_enhanced/ -r vh_df_ghostface_enh
+python run_crop.py -d /mnt/ssd/workspace/adi/repos/VisoMaster/generated_swaps/pair-200k_live_face_dataset-24nov/ghostface/ -t /mnt/NAS/dataset/deepfake/vh_deepfake/ghostface/ -r vh_df_ghostface
